@@ -44,7 +44,7 @@ export default function LoginPage() {
       setLog(p => [...p, "3. Profile role: " + profile?.role]);
       setLog(p => [...p, "4. Redirecting to /admin/dashboard..."]);
       
-      router.push("/admin/dashboard");
+      window.location.href = "/admin/dashboard";
     } catch (err: any) {
       setLog(p => [...p, "EXCEPTION: " + err.message]);
     }
