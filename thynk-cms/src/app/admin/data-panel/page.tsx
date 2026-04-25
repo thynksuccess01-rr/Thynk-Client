@@ -134,7 +134,7 @@ export default function DataPanelPage() {
                   <Plus size={14} color="white" />
                 </button>
               </div>
-              <div className="divide-y" style={{ divideColor: "#FAF4E8" }}>
+              <div className="divide-y" style={{ borderColor: "#FAF4E8" }}>
                 {entries.length === 0 && !showNewEntry && (
                   <p className="text-xs text-center py-8" style={{ color: "#A86035" }}>No entries yet</p>
                 )}
