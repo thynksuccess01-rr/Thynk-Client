@@ -1,92 +1,93 @@
 "use client";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("admin@thynksuccess.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [log, setLog] = useState<string[]>([]);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setLog([]);
+    setError("");
 
-    try {
-      const supabase = createClient();
-      setLog(p => [...p, "1. Supabase client created"]);
+    const supabase = createClient();
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      
-      if (error) {
-        setLog(p => [...p, "AUTH ERROR: " + error.message + " (code: " + error.status + ")"]);
-        setLoading(false);
-        return;
-      }
+    if (authError) {
+      setError(authError.message);
+      setLoading(false);
+      return;
+    }
 
-      setLog(p => [...p, "2. Auth success, user: " + data.user?.id]);
-
-      const { data: profile, error: profileError } = await supabase
+    if (data.user) {
+      const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", data.user.id)
         .single();
 
-      if (profileError) {
-        setLog(p => [...p, "PROFILE ERROR: " + profileError.message]);
-        setLoading(false);
-        return;
+      // Hard redirect — bypass Next.js router entirely
+      if (profile?.role === "admin") {
+        window.location.href = "/admin/dashboard";
+      } else {
+        window.location.href = "/portal/dashboard";
       }
-
-      setLog(p => [...p, "3. Profile role: " + profile?.role]);
-      setLog(p => [...p, "4. Redirecting to /admin/dashboard..."]);
-      
-      window.location.href = "/admin/dashboard";
-    } catch (err: any) {
-      setLog(p => [...p, "EXCEPTION: " + err.message]);
     }
+
     setLoading(false);
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#1a0f08", fontFamily: "monospace" }}>
-      <div style={{ width: 480, padding: 32, background: "#2c1a0f", borderRadius: 16, border: "1px solid #3d2314" }}>
-        <h1 style={{ color: "#d4a843", marginBottom: 24, fontSize: 20 }}>Thynk CMS — Login Debug</h1>
-        
-        <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ color: "#c27b4a", fontSize: 12, display: "block", marginBottom: 4 }}>Email</label>
-            <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", background: "#1a0f08", border: "1px solid #3d2314", borderRadius: 8, color: "#faf4e8", fontSize: 14, boxSizing: "border-box" }}
-            />
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #2C1A0F 0%, #3D2314 40%, #1A0F08 100%)" }}>
+      <div style={{ width: "100%", maxWidth: 420, padding: "0 24px" }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 64, height: 64, borderRadius: 16, background: "rgba(212,168,67,0.15)", border: "1px solid rgba(212,168,67,0.3)", marginBottom: 16 }}>
+            <span style={{ fontSize: 28, fontWeight: 700, color: "#D4A843", fontFamily: "Georgia, serif" }}>T</span>
           </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ color: "#c27b4a", fontSize: 12, display: "block", marginBottom: 4 }}>Password</label>
-            <input
-              type="password" value={password} onChange={e => setPassword(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", background: "#1a0f08", border: "1px solid #3d2314", borderRadius: 8, color: "#faf4e8", fontSize: 14, boxSizing: "border-box" }}
-            />
-          </div>
-          <button type="submit" disabled={loading}
-            style={{ width: "100%", padding: "12px", background: "#a86035", border: "none", borderRadius: 8, color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
+          <h1 style={{ fontSize: 28, fontWeight: 600, color: "#FAF4E8", fontFamily: "Georgia, serif", margin: "0 0 8px" }}>Thynk CMS</h1>
+          <p style={{ fontSize: 14, color: "#C27B4A", margin: 0 }}>Client Management Platform</p>
+        </div>
 
-        {log.length > 0 && (
-          <div style={{ marginTop: 20, padding: 16, background: "#1a0f08", borderRadius: 8, border: "1px solid #3d2314" }}>
-            <p style={{ color: "#d4a843", fontSize: 11, marginBottom: 8 }}>DEBUG LOG:</p>
-            {log.map((l, i) => (
-              <p key={i} style={{ color: l.includes("ERROR") || l.includes("EXCEPTION") ? "#ef4444" : "#86efac", fontSize: 12, margin: "4px 0" }}>
-                {l}
-              </p>
-            ))}
-          </div>
-        )}
+        <div style={{ background: "rgba(253,250,245,0.05)", backdropFilter: "blur(20px)", border: "1px solid rgba(237,217,176,0.15)", borderRadius: 20, padding: 32 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: "#FAF4E8", margin: "0 0 24px" }}>Sign in to your account</h2>
+
+          <form onSubmit={handleLogin}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#C27B4A", marginBottom: 6 }}>Email Address</label>
+              <input
+                type="email" value={email} onChange={e => setEmail(e.target.value)} required
+                placeholder="you@example.com"
+                style={{ width: "100%", padding: "12px 16px", background: "rgba(253,250,245,0.07)", border: "1px solid rgba(237,217,176,0.2)", borderRadius: 12, color: "#FAF4E8", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#C27B4A", marginBottom: 6 }}>Password</label>
+              <input
+                type="password" value={password} onChange={e => setPassword(e.target.value)} required
+                placeholder="••••••••"
+                style={{ width: "100%", padding: "12px 16px", background: "rgba(253,250,245,0.07)", border: "1px solid rgba(237,217,176,0.2)", borderRadius: 12, color: "#FAF4E8", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+
+            {error && (
+              <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, marginBottom: 16 }}>
+                <p style={{ color: "#FCA5A5", fontSize: 13, margin: 0 }}>{error}</p>
+              </div>
+            )}
+
+            <button type="submit" disabled={loading}
+              style={{ width: "100%", padding: "13px", background: "#A86035", border: "none", borderRadius: 12, color: "#FAF4E8", fontSize: 14, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+
+          <p style={{ fontSize: 12, textAlign: "center", marginTop: 20, color: "rgba(250,244,232,0.4)" }}>
+            Access is invitation-only. Contact your administrator.
+          </p>
+        </div>
       </div>
     </div>
   );
