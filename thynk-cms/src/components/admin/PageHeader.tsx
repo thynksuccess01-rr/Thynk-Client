@@ -5,10 +5,10 @@ interface PageHeaderProps {
 }
 export default function PageHeader({ title, subtitle, action }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between mb-8">
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
       <div>
-        <h1 className="text-2xl font-display font-semibold" style={{ color: "#1A0F08" }}>{title}</h1>
-        {subtitle && <p className="text-sm mt-1" style={{ color: "#A86035" }}>{subtitle}</p>}
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: "#1C1917", fontFamily: "Fraunces, Georgia, serif" }}>{title}</h1>
+        {subtitle && <p style={{ fontSize: 13.5, color: "#78716C", marginTop: 3 }}>{subtitle}</p>}
       </div>
       {action && <div>{action}</div>}
     </div>

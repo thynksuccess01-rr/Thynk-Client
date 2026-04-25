@@ -1,13 +1,8 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import {
-  LayoutDashboard, Users, Package, Link2, ClipboardList,
-  Palette, Settings, LogOut, ChevronRight, BarChart3
-} from "lucide-react";
-import clsx from "clsx";
+import { LayoutDashboard, Users, Package, Link2, ClipboardList, Palette, Settings, LogOut, ChevronRight } from "lucide-react";
 
 const nav = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
@@ -26,56 +21,51 @@ export default function Sidebar() {
 
   async function logout() {
     await supabase.auth.signOut();
-    router.push("/login");
+    window.location.href = "/login";
   }
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-60 flex flex-col z-30"
-      style={{ background: "#2C1A0F", borderRight: "1px solid rgba(237,217,176,0.08)" }}>
+    <aside style={{ position: "fixed", left: 0, top: 0, height: "100vh", width: 220, background: "#1C1917", display: "flex", flexDirection: "column", zIndex: 30, borderRight: "1px solid rgba(255,255,255,0.06)" }}>
       {/* Logo */}
-      <div className="px-6 py-6 border-b" style={{ borderColor: "rgba(237,217,176,0.08)" }}>
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(212,168,67,0.2)" }}>
-            <BarChart3 size={16} style={{ color: "#D4A843" }} />
+      <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: "#E8611A", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: "white", fontWeight: 700, fontSize: 15, fontFamily: "Georgia, serif" }}>T</span>
           </div>
           <div>
-            <p className="text-sm font-semibold font-display" style={{ color: "#FAF4E8" }}>Thynk CMS</p>
-            <p className="text-xs" style={{ color: "#C27B4A" }}>Admin Panel</p>
+            <p style={{ color: "#F5F4F0", fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>Thynk CMS</p>
+            <p style={{ color: "#78716C", fontSize: 11 }}>Admin Panel</p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        <p className="text-xs font-semibold px-4 mb-2" style={{ color: "rgba(194,123,74,0.6)" }}>NAVIGATION</p>
+      <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
+        <p style={{ color: "#4E4945", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", padding: "4px 10px 8px", textTransform: "uppercase" }}>Navigation</p>
         {nav.map(({ label, href, icon: Icon }) => {
           const active = path === href || path.startsWith(href + "/");
           return (
-            <Link key={href} href={href}
-              className={clsx("flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
-                active
-                  ? "text-gold-400"
-                  : "text-cream-200 hover:text-gold-400"
-              )}
-              style={active ? { background: "rgba(212,168,67,0.12)", borderLeft: "3px solid #D4A843", paddingLeft: "13px" } : {}}
-            >
-              <Icon size={16} />
-              <span>{label}</span>
-              {active && <ChevronRight size={14} className="ml-auto opacity-60" />}
+            <Link key={href} href={href} style={{
+              display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 7, fontSize: 13, fontWeight: active ? 600 : 400, textDecoration: "none", transition: "all 0.15s",
+              background: active ? "rgba(232,97,26,0.15)" : "transparent",
+              color: active ? "#F5A623" : "#A8A29E",
+            }}>
+              <Icon size={15} />
+              <span style={{ flex: 1 }}>{label}</span>
+              {active && <ChevronRight size={13} />}
             </Link>
           );
         })}
       </nav>
 
       {/* Footer */}
-      <div className="px-3 pb-4 border-t pt-4" style={{ borderColor: "rgba(237,217,176,0.08)" }}>
-        <button onClick={logout}
-          className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
-          style={{ color: "#C27B4A" }}
-          onMouseEnter={e => (e.currentTarget.style.background = "rgba(212,168,67,0.08)")}
-          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-        >
-          <LogOut size={16} />
+      <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <button onClick={logout} style={{
+          display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "8px 10px", borderRadius: 7, fontSize: 13, color: "#78716C", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit",
+        }}
+          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+          <LogOut size={15} />
           <span>Sign Out</span>
         </button>
       </div>

@@ -12,81 +12,54 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     const supabase = createClient();
     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-      return;
-    }
-
+    if (authError) { setError(authError.message); setLoading(false); return; }
     if (data.user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .single();
-
-      // Hard redirect — bypass Next.js router entirely
-      if (profile?.role === "admin") {
-        window.location.href = "/admin/dashboard";
-      } else {
-        window.location.href = "/portal/dashboard";
-      }
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+      window.location.href = profile?.role === "admin" ? "/admin/dashboard" : "/portal/dashboard";
     }
-
     setLoading(false);
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #2C1A0F 0%, #3D2314 40%, #1A0F08 100%)" }}>
-      <div style={{ width: "100%", maxWidth: 420, padding: "0 24px" }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 64, height: 64, borderRadius: 16, background: "rgba(212,168,67,0.15)", border: "1px solid rgba(212,168,67,0.3)", marginBottom: 16 }}>
-            <span style={{ fontSize: 28, fontWeight: 700, color: "#D4A843", fontFamily: "Georgia, serif" }}>T</span>
+    <div style={{ minHeight: "100vh", display: "flex", background: "#F5F4F0" }}>
+      <div style={{ width: 420, background: "#1C1917", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "48px 40px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 8, background: "#E8611A", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: "white", fontWeight: 700, fontSize: 16, fontFamily: "Georgia, serif" }}>T</span>
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 600, color: "#FAF4E8", fontFamily: "Georgia, serif", margin: "0 0 8px" }}>Thynk CMS</h1>
-          <p style={{ fontSize: 14, color: "#C27B4A", margin: 0 }}>Client Management Platform</p>
+          <span style={{ color: "#F5F4F0", fontWeight: 600, fontSize: 15 }}>Thynk CMS</span>
         </div>
-
-        <div style={{ background: "rgba(253,250,245,0.05)", backdropFilter: "blur(20px)", border: "1px solid rgba(237,217,176,0.15)", borderRadius: 20, padding: 32 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: "#FAF4E8", margin: "0 0 24px" }}>Sign in to your account</h2>
-
-          <form onSubmit={handleLogin}>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#C27B4A", marginBottom: 6 }}>Email Address</label>
-              <input
-                type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                placeholder="you@example.com"
-                style={{ width: "100%", padding: "12px 16px", background: "rgba(253,250,245,0.07)", border: "1px solid rgba(237,217,176,0.2)", borderRadius: 12, color: "#FAF4E8", fontSize: 14, outline: "none", boxSizing: "border-box" }}
-              />
+        <div>
+          <p style={{ fontSize: 28, fontWeight: 500, color: "#F5F4F0", fontFamily: "Fraunces, Georgia, serif", lineHeight: 1.3, marginBottom: 14 }}>Your agency.<br />Organised.</p>
+          <p style={{ fontSize: 13.5, color: "#78716C", lineHeight: 1.7 }}>Manage clients, campaigns, leads, and reports — all in one place.</p>
+        </div>
+        <p style={{ fontSize: 12, color: "#4E4945" }}>© {new Date().getFullYear()} Thynk Success</p>
+      </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
+        <div style={{ width: "100%", maxWidth: 360 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1C1917", marginBottom: 6, fontFamily: "Fraunces, Georgia, serif" }}>Sign in</h2>
+          <p style={{ fontSize: 13.5, color: "#78716C", marginBottom: 28 }}>Enter your credentials to access the platform.</p>
+          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12.5, fontWeight: 500, color: "#57534E", marginBottom: 5 }}>Email</label>
+              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
             </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#C27B4A", marginBottom: 6 }}>Password</label>
-              <input
-                type="password" value={password} onChange={e => setPassword(e.target.value)} required
-                placeholder="••••••••"
-                style={{ width: "100%", padding: "12px 16px", background: "rgba(253,250,245,0.07)", border: "1px solid rgba(237,217,176,0.2)", borderRadius: 12, color: "#FAF4E8", fontSize: 14, outline: "none", boxSizing: "border-box" }}
-              />
+            <div>
+              <label style={{ display: "block", fontSize: 12.5, fontWeight: 500, color: "#57534E", marginBottom: 5 }}>Password</label>
+              <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
             </div>
-
             {error && (
-              <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, marginBottom: 16 }}>
-                <p style={{ color: "#FCA5A5", fontSize: 13, margin: 0 }}>{error}</p>
+              <div style={{ padding: "9px 12px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 7 }}>
+                <p style={{ fontSize: 13, color: "#B91C1C" }}>{error}</p>
               </div>
             )}
-
-            <button type="submit" disabled={loading}
-              style={{ width: "100%", padding: "13px", background: "#A86035", border: "none", borderRadius: 12, color: "#FAF4E8", fontSize: 14, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+            <button className="btn-primary" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center", padding: "10px", marginTop: 4, fontSize: 14 }}>
               {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
-
-          <p style={{ fontSize: 12, textAlign: "center", marginTop: 20, color: "rgba(250,244,232,0.4)" }}>
-            Access is invitation-only. Contact your administrator.
-          </p>
+          <p style={{ fontSize: 12, color: "#A8A29E", textAlign: "center", marginTop: 20 }}>Access is invitation-only. Contact your administrator.</p>
         </div>
       </div>
     </div>
