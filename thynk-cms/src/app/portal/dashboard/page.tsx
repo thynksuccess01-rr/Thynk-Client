@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ChevronDown } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, PieChart, Pie, Cell, Legend } from "recharts";
 
 const TIMELINES=[{label:"Today",days:1},{label:"Last 5 Days",days:5},{label:"Last 15 Days",days:15},{label:"Last 30 Days",days:30},{label:"Last 90 Days",days:90},{label:"Last 180 Days",days:180},{label:"Current Year",days:365}];
 const TABS=["Summary","Campaigns","Leads","Reports"];
@@ -10,12 +10,24 @@ const fmt=(n:number)=>n>=1000000?`${(n/1000000).toFixed(1)}M`:n>=1000?`${(n/1000
 const fmtINR=(n:number)=>`₹${n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:(n??0)}`;
 const rate=(a:number,b:number)=>b>0?Math.round(a/b*100):0;
 
+const CHART_COLORS={email:"#3B82F6",wa:"#10B981",calls:"#E8611A"};
+
+const CustomTooltip=({active,payload,label}:any)=>{
+  if(!active||!payload?.length) return null;
+  return(<div style={{background:"#1C1917",borderRadius:10,padding:"10px 14px",boxShadow:"0 8px 24px rgba(0,0,0,0.3)"}}><p style={{color:"#A8A29E",fontSize:11,marginBottom:6}}>{label}</p>{payload.map((p:any)=>(<p key={p.dataKey} style={{color:p.color,fontSize:12.5,fontWeight:600}}>{p.name}: {p.value}</p>))}</div>);
+};
+
+const ChartLegend=({items}:{items:[string,string][]})=>(<div style={{display:"flex",gap:14}}>{items.map(([label,color])=>(<span key={label} style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:"#78716C"}}><span style={{width:18,height:2.5,borderRadius:2,background:color,display:"inline-block"}}/>{label}</span>))}</div>);
+
+const RateGauge=({label,value,color}:{label:string,value:number,color:string})=>(<div style={{textAlign:"center"}}><div style={{position:"relative",width:64,height:64,margin:"0 auto 6px"}}><svg viewBox="0 0 64 64" style={{transform:"rotate(-90deg)"}}><circle cx="32" cy="32" r="26" fill="none" stroke="#F0EEEC" strokeWidth="7"/><circle cx="32" cy="32" r="26" fill="none" stroke={color} strokeWidth="7" strokeDasharray={`${(value/100)*163.4} 163.4`} strokeLinecap="round"/></svg><span style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color}}>{value}%</span></div><p style={{fontSize:11,color:"#78716C",fontWeight:500}}>{label}</p></div>);
+
 export default function PortalDashboard() {
   const [client, setClient] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [selProduct, setSelProduct] = useState("all");
   const [timeline, setTimeline] = useState(30);
   const [tab, setTab] = useState("Summary");
+  const [campChan, setCampChan] = useState("Email Campaign");
   const [entries, setEntries] = useState<any[]>([]);
   const [updates, setUpdates] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
@@ -40,9 +52,9 @@ export default function PortalDashboard() {
     const since=new Date(); since.setDate(since.getDate()-timeline);
     const s=since.toISOString().split("T")[0];
     const [e,u,l]=await Promise.all([
-      supabase.from("data_entries").select("*").eq("client_id",clientId).gte("period_start",s).order("period_start"),
+      supabase.from("data_entries").select("*").eq("client_id",clientId).gte("created_at",s).order("created_at"),
       supabase.from("campaign_updates").select("*").eq("client_id",clientId).gte("update_date",s).order("update_date"),
-      supabase.from("leads").select("*").eq("client_id",clientId).order("created_at",{ascending:false}),
+      supabase.from("leads").select("*").eq("client_id",clientId).gte("created_at",s).order("created_at",{ascending:false}),
     ]);
     setEntries(e.data??[]); setUpdates(u.data??[]); setLeads(l.data??[]);
   },[clientId,timeline]);
@@ -163,15 +175,15 @@ export default function PortalDashboard() {
               </div>
               {chartData.length===0?<div style={{height:180,display:"flex",alignItems:"center",justifyContent:"center",color:"#A8A29E",fontSize:13}}>No data yet</div>:(
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={chartData} barSize={7} barGap={2}>
+                  <LineChart data={chartData} margin={{top:8,right:8,left:0,bottom:0}}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false}/>
                     <XAxis dataKey="name" tick={{fontSize:10,fill:"#A8A29E"}} axisLine={false} tickLine={false}/>
                     <YAxis tick={{fontSize:10,fill:"#A8A29E"}} axisLine={false} tickLine={false} width={28}/>
-                    <Tooltip contentStyle={{background:"#1C1917",border:"none",borderRadius:8,color:"#F5F4F0",fontSize:12}}/>
-                    <Bar dataKey="Email" fill="#3B82F6" radius={[3,3,0,0]}/>
-                    <Bar dataKey="WA" fill="#10B981" radius={[3,3,0,0]}/>
-                    <Bar dataKey="Calls" fill={accent} radius={[3,3,0,0]}/>
-                  </BarChart>
+                    <Tooltip content={<CustomTooltip/>}/>
+                    <Line type="monotone" dataKey="Email" stroke={CHART_COLORS.email} strokeWidth={2.5} dot={{r:4,fill:CHART_COLORS.email,strokeWidth:2,stroke:"#fff"}} activeDot={{r:6,strokeWidth:0}}/>
+                    <Line type="monotone" dataKey="WA" stroke={CHART_COLORS.wa} strokeWidth={2.5} dot={{r:4,fill:CHART_COLORS.wa,strokeWidth:2,stroke:"#fff"}} activeDot={{r:6,strokeWidth:0}}/>
+                    <Line type="monotone" dataKey="Calls" stroke={accent} strokeWidth={2.5} dot={{r:4,fill:accent,strokeWidth:2,stroke:"#fff"}} activeDot={{r:6,strokeWidth:0}}/>
+                  </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
@@ -262,33 +274,62 @@ export default function PortalDashboard() {
       )}
 
       {/* CAMPAIGNS TAB */}
-      {tab==="Campaigns"&&(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
-          {[
-            {icon:"📧",title:"Email Campaign",color:"#2563EB",bg:"#EFF6FF",border:"#BFDBFE",stats:[["Sent",emailSent],["Opened",emailOpened],["Clicked",emailClicked],["Open Rate",`${rate(emailOpened,emailSent)}%`],["Click Rate",`${rate(emailClicked,emailSent)}%`]]},
-            {icon:"💬",title:"WhatsApp Campaign",color:"#16A34A",bg:"#F0FDF4",border:"#A7F3D0",stats:[["Sent",waSent],["Delivered",waDelivered],["Replied",waReplied],["Delivery Rate",`${rate(waDelivered,waSent)}%`],["Reply Rate",`${rate(waReplied,waSent)}%`]]},
-            {icon:"📞",title:"Calls",color:"#7C3AED",bg:"#F5F3FF",border:"#DDD6FE",stats:[["Made",callsMade],["Connected",callsConnected],["Converted",callsConverted],["Connect Rate",`${rate(callsConnected,callsMade)}%`],["Conversion",`${rate(callsConverted,callsMade)}%`]]},
-          ].map(({icon,title,color,bg,border,stats})=>(
-            <div key={title} style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,overflow:"hidden"}}>
-              <div style={{background:bg,border:`1px solid ${border}`,padding:"16px 20px",display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:26}}>{icon}</span>
-                <p style={{fontSize:15,fontWeight:700,color}}>{title}</p>
-              </div>
-              <div style={{padding:20}}>
-                {stats.map(([l,v])=>(
-                  <div key={l as string} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid #F5F4F0"}}>
-                    <span style={{fontSize:13,color:"#78716C"}}>{l as string}</span>
-                    <span style={{fontSize:16,fontWeight:800,color,fontVariantNumeric:"tabular-nums"}}>{typeof v==="number"?fmt(v):v}</span>
-                  </div>
-                ))}
-                <div style={{marginTop:16,height:6,background:"#F5F4F0",borderRadius:3}}>
-                  <div style={{height:6,background:color,borderRadius:3,width:`${Math.min(rate(stats[1][1] as number,stats[0][1] as number),100)}%`,transition:"width 0.6s"}}/>
+      {tab==="Campaigns"&&(()=>{
+        const CAMP_CHANNELS=["Email Campaign","WhatsApp Campaign","Calls"];
+        const emailPeriodData=entries.map((e:any)=>{const eu=updates.filter((u:any)=>u.channel==="email"&&u.update_date>=e.period_start&&u.update_date<=e.period_end);return{name:e.entry_label||new Date(e.period_start).toLocaleDateString("en-IN",{month:"short",day:"numeric"}),Sent:e.email_sent+eu.reduce((s:number,u:any)=>s+u.email_sent,0),Opened:e.email_opened+eu.reduce((s:number,u:any)=>s+u.email_opened,0),Clicked:e.email_clicked+eu.reduce((s:number,u:any)=>s+u.email_clicked,0)};});
+        const waPeriodData=entries.map((e:any)=>{const wu=updates.filter((u:any)=>u.channel==="whatsapp"&&u.update_date>=e.period_start&&u.update_date<=e.period_end);return{name:e.entry_label||new Date(e.period_start).toLocaleDateString("en-IN",{month:"short",day:"numeric"}),Sent:e.whatsapp_sent+wu.reduce((s:number,u:any)=>s+u.whatsapp_sent,0),Delivered:e.whatsapp_delivered+wu.reduce((s:number,u:any)=>s+u.whatsapp_delivered,0),Replied:e.whatsapp_replied+wu.reduce((s:number,u:any)=>s+u.whatsapp_replied,0)};});
+        const callsPeriodData=entries.map((e:any)=>{const cu=updates.filter((u:any)=>u.channel==="calls"&&u.update_date>=e.period_start&&u.update_date<=e.period_end);return{name:e.entry_label||new Date(e.period_start).toLocaleDateString("en-IN",{month:"short",day:"numeric"}),Made:e.calls_made+cu.reduce((s:number,u:any)=>s+u.calls_made,0),Connected:e.calls_connected+cu.reduce((s:number,u:any)=>s+u.calls_connected,0),Converted:e.calls_converted+cu.reduce((s:number,u:any)=>s+u.calls_converted,0)};});
+        const campConfig:Record<string,any>={
+          "Email Campaign":{icon:"📧",color:"#2563EB",bg:"#EFF6FF",border:"#BFDBFE",stats:[["Sent",emailSent],["Opened",emailOpened],["Clicked",emailClicked],["Open Rate",`${rate(emailOpened,emailSent)}%`],["Click Rate",`${rate(emailClicked,emailSent)}%`]],rateA:rate(emailOpened,emailSent),rateB:rate(emailClicked,emailSent),periodData:emailPeriodData,lines:[["Sent","#6366F1"],["Opened","#2563EB"],["Clicked","#0891B2"]]},
+          "WhatsApp Campaign":{icon:"💬",color:"#16A34A",bg:"#F0FDF4",border:"#A7F3D0",stats:[["Sent",waSent],["Delivered",waDelivered],["Replied",waReplied],["Delivery Rate",`${rate(waDelivered,waSent)}%`],["Reply Rate",`${rate(waReplied,waSent)}%`]],rateA:rate(waDelivered,waSent),rateB:rate(waReplied,waSent),periodData:waPeriodData,lines:[["Sent","#6EE7B7"],["Delivered","#10B981"],["Replied","#059669"]]},
+          "Calls":{icon:"📞",color:"#7C3AED",bg:"#F5F3FF",border:"#DDD6FE",stats:[["Made",callsMade],["Connected",callsConnected],["Converted",callsConverted],["Connect Rate",`${rate(callsConnected,callsMade)}%`],["Conversion",`${rate(callsConverted,callsMade)}%`]],rateA:rate(callsConnected,callsMade),rateB:rate(callsConverted,callsMade),periodData:callsPeriodData,lines:[["Made","#C4B5FD"],["Connected","#8B5CF6"],["Converted","#6D28D9"]]},
+        };
+        const cfg=campConfig[campChan];
+        return(
+          <div>
+            <div style={{display:"flex",gap:8,marginBottom:20}}>
+              {CAMP_CHANNELS.map(ch=>{const active=campChan===ch;return(<button key={ch} onClick={()=>setCampChan(ch)} style={{display:"flex",alignItems:"center",gap:7,padding:"9px 18px",borderRadius:10,border:active?`2px solid ${campConfig[ch].color}`:"2px solid #E7E5E4",background:active?campConfig[ch].bg:"#fff",color:active?campConfig[ch].color:"#78716C",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s"}}><span style={{fontSize:17}}>{campConfig[ch].icon}</span>{ch}</button>);})}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:16,marginBottom:16}}>
+              <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,overflow:"hidden"}}>
+                <div style={{background:cfg.bg,padding:"16px 20px",display:"flex",alignItems:"center",gap:10,borderBottom:`1px solid ${cfg.border}`}}><span style={{fontSize:24}}>{cfg.icon}</span><p style={{fontSize:15,fontWeight:700,color:cfg.color}}>{campChan}</p></div>
+                <div style={{padding:20}}>
+                  {cfg.stats.map(([l,v]:any)=>(<div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid #F5F4F0"}}><span style={{fontSize:13,color:"#78716C"}}>{l}</span><span style={{fontSize:16,fontWeight:800,color:cfg.color,fontVariantNumeric:"tabular-nums"}}>{typeof v==="number"?fmt(v):v}</span></div>))}
+                  <div style={{marginTop:16,display:"flex",gap:14,justifyContent:"center"}}><RateGauge label={cfg.stats[3][0]} value={cfg.rateA} color={cfg.color}/><RateGauge label={cfg.stats[4][0]} value={cfg.rateB} color={cfg.color}/></div>
                 </div>
               </div>
+              <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:20}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div><p style={{fontSize:13,fontWeight:700,color:"#1C1917"}}>📊 {campChan} — Period Breakdown</p><p style={{fontSize:11.5,color:"#A8A29E",marginTop:2}}>Data by period label</p></div>
+                  <ChartLegend items={cfg.lines}/>
+                </div>
+                {cfg.periodData.length===0?<div style={{height:240,display:"flex",alignItems:"center",justifyContent:"center",color:"#A8A29E",fontSize:13}}>No data</div>:(
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={cfg.periodData} margin={{top:8,right:8,left:0,bottom:0}}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false}/>
+                      <XAxis dataKey="name" tick={{fontSize:10.5,fill:"#A8A29E"}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fontSize:10,fill:"#A8A29E"}} axisLine={false} tickLine={false} width={32}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      {cfg.lines.map(([key,color]:[string,string])=>(<Line key={key} type="monotone" dataKey={key} stroke={color} strokeWidth={2.5} dot={{r:4,fill:color,strokeWidth:2,stroke:"#fff"}} activeDot={{r:6,strokeWidth:0}}/>))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+            <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:20}}>
+              <p style={{fontSize:13,fontWeight:700,color:"#1C1917",marginBottom:14}}>📋 Period Data — {campChan}</p>
+              {cfg.periodData.length===0?<p style={{color:"#A8A29E",fontSize:13,textAlign:"center",padding:"24px 0"}}>No periods found</p>:(
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <thead><tr style={{background:"#FAFAF9",borderBottom:"1px solid #F0EEEC"}}>
+                    {["Period",...cfg.lines.map(([k]:any)=>k),"Rate 1","Rate 2"].map((h:string)=>(<th key={h} style={{textAlign:"left",padding:"9px 12px",fontSize:11.5,fontWeight:600,color:"#A8A29E"}}>{h}</th>))}
+                  </tr></thead>
+                  <tbody>{cfg.periodData.map((row:any,i:number)=>{const vals=cfg.lines.map(([k]:any)=>row[k]??0);const r1=rate(vals[1],vals[0]);const r2=rate(vals[2]??0,vals[0]);return(<tr key={i} style={{borderBottom:"1px solid #FAFAF9"}}><td style={{padding:"10px 12px"}}><span style={{background:cfg.bg,color:cfg.color,padding:"2px 8px",borderRadius:6,fontSize:11.5,fontWeight:600}}>{row.name}</span></td>{vals.map((v:number,vi:number)=>(<td key={vi} style={{padding:"10px 12px",fontWeight:vi===0?600:400,color:vi===0?"#1C1917":"#57534E"}}>{fmt(v)}</td>))}<td style={{padding:"10px 12px"}}><span style={{background:cfg.bg,color:cfg.color,padding:"2px 8px",borderRadius:8,fontSize:11.5,fontWeight:700}}>{r1}%</span></td><td style={{padding:"10px 12px"}}><span style={{background:cfg.bg,color:cfg.color,padding:"2px 8px",borderRadius:8,fontSize:11.5,fontWeight:700}}>{r2}%</span></td></tr>);})}</tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* LEADS TAB */}
       {tab==="Leads"&&(
