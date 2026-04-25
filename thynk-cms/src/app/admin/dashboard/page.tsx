@@ -59,6 +59,7 @@ export default function AdminDashboard() {
   const [sel, setSel] = useState("all");
   const [timeline, setTimeline] = useState(30);
   const [tab, setTab] = useState("Summary");
+  const [campChan, setCampChan] = useState("Email Campaign");
   const [entries, setEntries] = useState<any[]>([]);
   const [updates, setUpdates] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
@@ -79,9 +80,9 @@ export default function AdminDashboard() {
     const s = since.toISOString().split("T")[0];
     const base = (q: any) => (sel !== "all" ? q.eq("client_id", sel) : q);
     const [e, u, l] = await Promise.all([
-      base(supabase.from("data_entries").select("*").gte("period_start", s)).order("period_start"),
+      base(supabase.from("data_entries").select("*").gte("created_at", s)).order("created_at"),
       base(supabase.from("campaign_updates").select("*").gte("update_date", s)).order("update_date"),
-      base(supabase.from("leads").select("*, data_entries(period_start,period_end,entry_label)")).order("created_at", { ascending: false }),
+      base(supabase.from("leads").select("*, data_entries(period_start,period_end,entry_label)").gte("created_at", s)).order("created_at", { ascending: false }),
     ]);
     setEntries(e.data ?? []); setUpdates(u.data ?? []); setLeads(l.data ?? []);
   }, [sel, timeline]);
@@ -412,56 +413,138 @@ export default function AdminDashboard() {
       )}
 
       {/* ═══ CAMPAIGNS ═══ */}
-      {tab === "Campaigns" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 20 }}>
-            {[
-              { icon: "📧", title: "Email Campaign", color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", stats: [["Sent", emailSent], ["Opened", emailOpened], ["Clicked", emailClicked], ["Open Rate", `${rate(emailOpened, emailSent)}%`], ["Click Rate", `${rate(emailClicked, emailSent)}%`]], rateA: rate(emailOpened, emailSent), rateB: rate(emailClicked, emailSent) },
-              { icon: "💬", title: "WhatsApp", color: "#16A34A", bg: "#F0FDF4", border: "#A7F3D0", stats: [["Sent", waSent], ["Delivered", waDelivered], ["Replied", waReplied], ["Delivery Rate", `${rate(waDelivered, waSent)}%`], ["Reply Rate", `${rate(waReplied, waSent)}%`]], rateA: rate(waDelivered, waSent), rateB: rate(waReplied, waSent) },
-              { icon: "📞", title: "Calls", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE", stats: [["Made", callsMade], ["Connected", callsConnected], ["Converted", callsConverted], ["Connect Rate", `${rate(callsConnected, callsMade)}%`], ["Conversion", `${rate(callsConverted, callsMade)}%`]], rateA: rate(callsConnected, callsMade), rateB: rate(callsConverted, callsMade) },
-            ].map(({ icon, title, color, bg, border, stats, rateA, rateB }) => (
-              <div key={title} style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ background: bg, padding: "16px 20px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 24 }}>{icon}</span>
-                  <p style={{ fontSize: 15, fontWeight: 700, color }}>{title}</p>
+      {tab === "Campaigns" && (() => {
+        const CAMP_CHANNELS = ["Email Campaign", "WhatsApp Campaign", "Calls"];
+
+        // Period-level breakdown per channel
+        const emailPeriodData = entries.map((e) => {
+          const eu = updates.filter((u) => u.channel === "email" && u.update_date >= e.period_start && u.update_date <= e.period_end);
+          const sent = e.email_sent + eu.reduce((s: number, u: any) => s + u.email_sent, 0);
+          const opened = e.email_opened + eu.reduce((s: number, u: any) => s + u.email_opened, 0);
+          const clicked = e.email_clicked + eu.reduce((s: number, u: any) => s + u.email_clicked, 0);
+          return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: sent, Opened: opened, Clicked: clicked };
+        });
+        const waPeriodData = entries.map((e) => {
+          const wu = updates.filter((u) => u.channel === "whatsapp" && u.update_date >= e.period_start && u.update_date <= e.period_end);
+          const sent = e.whatsapp_sent + wu.reduce((s: number, u: any) => s + u.whatsapp_sent, 0);
+          const delivered = e.whatsapp_delivered + wu.reduce((s: number, u: any) => s + u.whatsapp_delivered, 0);
+          const replied = e.whatsapp_replied + wu.reduce((s: number, u: any) => s + u.whatsapp_replied, 0);
+          return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: sent, Delivered: delivered, Replied: replied };
+        });
+        const callsPeriodData = entries.map((e) => {
+          const cu = updates.filter((u) => u.channel === "calls" && u.update_date >= e.period_start && u.update_date <= e.period_end);
+          const made = e.calls_made + cu.reduce((s: number, u: any) => s + u.calls_made, 0);
+          const connected = e.calls_connected + cu.reduce((s: number, u: any) => s + u.calls_connected, 0);
+          const converted = e.calls_converted + cu.reduce((s: number, u: any) => s + u.calls_converted, 0);
+          return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Made: made, Connected: connected, Converted: converted };
+        });
+
+        const campConfig: Record<string, { icon: string; color: string; bg: string; border: string; stats: [string, number | string][]; rateA: number; rateB: number; periodData: any[]; lines: [string, string][] }> = {
+          "Email Campaign": { icon: "📧", color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", stats: [["Sent", emailSent], ["Opened", emailOpened], ["Clicked", emailClicked], ["Open Rate", `${rate(emailOpened, emailSent)}%`], ["Click Rate", `${rate(emailClicked, emailSent)}%`]], rateA: rate(emailOpened, emailSent), rateB: rate(emailClicked, emailSent), periodData: emailPeriodData, lines: [["Sent", "#6366F1"], ["Opened", "#2563EB"], ["Clicked", "#0891B2"]] },
+          "WhatsApp Campaign": { icon: "💬", color: "#16A34A", bg: "#F0FDF4", border: "#A7F3D0", stats: [["Sent", waSent], ["Delivered", waDelivered], ["Replied", waReplied], ["Delivery Rate", `${rate(waDelivered, waSent)}%`], ["Reply Rate", `${rate(waReplied, waSent)}%`]], rateA: rate(waDelivered, waSent), rateB: rate(waReplied, waSent), periodData: waPeriodData, lines: [["Sent", "#6EE7B7"], ["Delivered", "#10B981"], ["Replied", "#059669"]] },
+          "Calls": { icon: "📞", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE", stats: [["Made", callsMade], ["Connected", callsConnected], ["Converted", callsConverted], ["Connect Rate", `${rate(callsConnected, callsMade)}%`], ["Conversion", `${rate(callsConverted, callsMade)}%`]], rateA: rate(callsConnected, callsMade), rateB: rate(callsConverted, callsMade), periodData: callsPeriodData, lines: [["Made", "#C4B5FD"], ["Connected", "#8B5CF6"], ["Converted", "#6D28D9"]] },
+        };
+
+        const cfg = campConfig[campChan];
+
+        return (
+          <div>
+            {/* Channel sub-tabs */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+              {CAMP_CHANNELS.map((ch) => {
+                const ico = campConfig[ch].icon;
+                const active = campChan === ch;
+                return (
+                  <button key={ch} onClick={() => setCampChan(ch)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", borderRadius: 10, border: active ? `2px solid ${campConfig[ch].color}` : "2px solid #E7E5E4", background: active ? campConfig[ch].bg : "#fff", color: active ? campConfig[ch].color : "#78716C", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}>
+                    <span style={{ fontSize: 17 }}>{ico}</span>{ch}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, marginBottom: 16 }}>
+              {/* Stats card */}
+              <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ background: cfg.bg, padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${cfg.border}` }}>
+                  <span style={{ fontSize: 24 }}>{cfg.icon}</span>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: cfg.color }}>{campChan}</p>
                 </div>
                 <div style={{ padding: 20 }}>
-                  {stats.map(([l, v]) => (
+                  {cfg.stats.map(([l, v]) => (
                     <div key={l as string} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F5F4F0" }}>
                       <span style={{ fontSize: 13, color: "#78716C" }}>{l as string}</span>
-                      <span style={{ fontSize: 16, fontWeight: 800, color, fontVariantNumeric: "tabular-nums" }}>{typeof v === "number" ? fmt(v) : v}</span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: cfg.color, fontVariantNumeric: "tabular-nums" }}>{typeof v === "number" ? fmt(v) : v}</span>
                     </div>
                   ))}
-                  <div style={{ marginTop: 14, display: "flex", gap: 12, justifyContent: "center" }}>
-                    <RateGauge label={stats[3][0] as string} value={rateA} color={color} />
-                    <RateGauge label={stats[4][0] as string} value={rateB} color={color} />
+                  <div style={{ marginTop: 16, display: "flex", gap: 14, justifyContent: "center" }}>
+                    <RateGauge label={cfg.stats[3][0] as string} value={cfg.rateA} color={cfg.color} />
+                    <RateGauge label={cfg.stats[4][0] as string} value={cfg.rateB} color={cfg.color} />
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>📊 Channel Volume by Period</p>
-              <ChartLegend items={[["Email", CHART_COLORS.email], ["WA", CHART_COLORS.wa], ["Calls", CHART_COLORS.calls]]} />
+
+              {/* Period breakdown chart */}
+              <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>📊 {campChan} — Period Breakdown</p>
+                    <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>Data by period label</p>
+                  </div>
+                  <ChartLegend items={cfg.lines} />
+                </div>
+                {cfg.periodData.length === 0 ? (
+                  <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data for this period</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={cfg.periodData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10.5, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={32} />
+                      <Tooltip content={<CustomTooltip />} />
+                      {cfg.lines.map(([key, color]) => (
+                        <Line key={key} type="monotone" dataKey={key} stroke={color} strokeWidth={2.5} dot={{ r: 4, fill: color, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }} />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
             </div>
-            {periodChartData.length === 0 ? <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data</div> : (
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={periodChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10.5, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={32} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, color: "#78716C" }} />
-                  <Line type="monotone" dataKey="Email" stroke={CHART_COLORS.email} strokeWidth={2.5} dot={{ r: 4, fill: CHART_COLORS.email, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6 }} />
-                  <Line type="monotone" dataKey="WA" stroke={CHART_COLORS.wa} strokeWidth={2.5} dot={{ r: 4, fill: CHART_COLORS.wa, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6 }} />
-                  <Line type="monotone" dataKey="Calls" stroke={CHART_COLORS.calls} strokeWidth={2.5} dot={{ r: 4, fill: CHART_COLORS.calls, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
+
+            {/* Period data table */}
+            <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>📋 Period Data — {campChan}</p>
+              {cfg.periodData.length === 0 ? <p style={{ color: "#A8A29E", fontSize: 13, textAlign: "center", padding: "24px 0" }}>No periods found</p> : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead><tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
+                    {["Period", ...cfg.lines.map(([k]) => k), "Rate 1", "Rate 2"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11.5, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {cfg.periodData.map((row, i) => {
+                      const vals = cfg.lines.map(([k]) => row[k] ?? 0);
+                      const r1 = rate(vals[1], vals[0]);
+                      const r2 = rate(vals[2] ?? 0, vals[0]);
+                      return (
+                        <tr key={i} style={{ borderBottom: "1px solid #FAFAF9" }}>
+                          <td style={{ padding: "10px 12px", fontWeight: 600, color: "#1C1917" }}>
+                            <span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 8px", borderRadius: 6, fontSize: 11.5 }}>{row.name}</span>
+                          </td>
+                          {vals.map((v, vi) => (
+                            <td key={vi} style={{ padding: "10px 12px", fontWeight: vi === 0 ? 600 : 400, color: vi === 0 ? "#1C1917" : "#57534E" }}>{fmt(v)}</td>
+                          ))}
+                          <td style={{ padding: "10px 12px" }}><span style={{ background: cfg.bg, color: cfg.color, padding: "2px 8px", borderRadius: 8, fontSize: 11.5, fontWeight: 700 }}>{r1}%</span></td>
+                          <td style={{ padding: "10px 12px" }}><span style={{ background: cfg.bg, color: cfg.color, padding: "2px 8px", borderRadius: 8, fontSize: 11.5, fontWeight: 700 }}>{r2}%</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ═══ LEADS ═══ */}
       {tab === "Leads" && (
@@ -602,4 +685,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-
