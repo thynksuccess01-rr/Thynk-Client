@@ -52,9 +52,9 @@ export default function PortalDashboard() {
     const since=new Date(); since.setDate(since.getDate()-timeline);
     const s=since.toISOString().split("T")[0];
     const [e,u,l]=await Promise.all([
-      supabase.from("data_entries").select("*").eq("client_id",clientId).gte("created_at",s).order("created_at"),
+      supabase.from("data_entries").select("*").eq("client_id",clientId).gte("period_start",s).order("period_start"),
       supabase.from("campaign_updates").select("*").eq("client_id",clientId).gte("update_date",s).order("update_date"),
-      supabase.from("leads").select("*").eq("client_id",clientId).gte("created_at",s).order("created_at",{ascending:false}),
+      supabase.from("leads").select("*").eq("client_id",clientId).order("created_at",{ascending:false}),
     ]);
     setEntries(e.data??[]); setUpdates(u.data??[]); setLeads(l.data??[]);
   },[clientId,timeline]);
