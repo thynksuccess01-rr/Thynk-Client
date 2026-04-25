@@ -45,7 +45,7 @@ export default function ProductsPage() {
     if (error) toast.error(error.message); else { toast.success("Deleted"); load(); }
   }
 
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
 
   return (
     <div>
