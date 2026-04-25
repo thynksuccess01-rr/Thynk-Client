@@ -14,12 +14,13 @@ import {
 const TIMELINES = [
   { label: "Today", days: 1 },
   { label: "Last 5 Days", days: 5 },
-  { label: "Last 10 Days", days: 10 },
   { label: "Last 15 Days", days: 15 },
   { label: "Last 30 Days", days: 30 },
+  { label: "Last 90 Days", days: 90 },
+  { label: "Last 180 Days", days: 180 },
   { label: "Current Year", days: 365 },
 ];
-const TABS = ["Summary", "Campaigns", "Leads", "Revenue"];
+const TABS = ["Summary", "Campaigns", "Leads", "Revenue", "Reports"];
 
 const fmt = (n: number) =>
   n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n ?? 0);
@@ -60,6 +61,7 @@ export default function AdminDashboard() {
   const [timeline, setTimeline] = useState(30);
   const [tab, setTab] = useState("Summary");
   const [campChan, setCampChan] = useState("Email Campaign");
+  const [reportTab, setReportTab] = useState("Leads");
   const [entries, setEntries] = useState<any[]>([]);
   const [updates, setUpdates] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
@@ -80,9 +82,9 @@ export default function AdminDashboard() {
     const s = since.toISOString().split("T")[0];
     const base = (q: any) => (sel !== "all" ? q.eq("client_id", sel) : q);
     const [e, u, l] = await Promise.all([
-      base(supabase.from("data_entries").select("*").gte("created_at", s)).order("created_at"),
+      base(supabase.from("data_entries").select("*").gte("period_start", s)).order("period_start"),
       base(supabase.from("campaign_updates").select("*").gte("update_date", s)).order("update_date"),
-      base(supabase.from("leads").select("*, data_entries(period_start,period_end,entry_label)").gte("created_at", s)).order("created_at", { ascending: false }),
+      base(supabase.from("leads").select("*, data_entries(period_start,period_end,entry_label)")).order("created_at", { ascending: false }),
     ]);
     setEntries(e.data ?? []); setUpdates(u.data ?? []); setLeads(l.data ?? []);
   }, [sel, timeline]);
@@ -682,6 +684,369 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+      {/* ═══ REPORTS ═══ */}
+      {tab === "Reports" && (() => {
+        const REPORT_TABS = ["Leads", "Revenue", "Top Performing"];
+
+        // ── Geography helpers ──────────────────────────────────────────────
+        const groupBy = (arr: any[], key: string) => {
+          const map: Record<string, any[]> = {};
+          arr.forEach((item) => {
+            const k = item[key] ?? "Unknown";
+            if (!map[k]) map[k] = [];
+            map[k].push(item);
+          });
+          return Object.entries(map).sort((a, b) => b[1].length - a[1].length);
+        };
+
+        // parse "City, State, Country" or any subset from location field
+        const parseLocation = (loc: string | undefined) => {
+          if (!loc) return { city: "Unknown", state: "Unknown", country: "Unknown" };
+          const parts = loc.split(",").map((p) => p.trim());
+          return {
+            city: parts[0] ?? "Unknown",
+            state: parts[1] ?? "Unknown",
+            country: parts[2] ?? "Unknown",
+          };
+        };
+
+        const leadsWithGeo = leads.map((l) => ({ ...l, ...parseLocation(l.location) }));
+        const wonLeadsGeo = leadsWithGeo.filter((l) => l.status === "won");
+
+        // Lead geography
+        const leadsByCountry = groupBy(leadsWithGeo, "country");
+        const leadsByState = groupBy(leadsWithGeo, "state");
+        const leadsByCity = groupBy(leadsWithGeo, "city");
+
+        // Revenue geography — from leads with expected_revenue
+        const revByCountry = Object.entries(
+          leadsWithGeo.reduce((acc: Record<string, number>, l) => {
+            acc[l.country] = (acc[l.country] ?? 0) + (l.expected_revenue ?? 0);
+            return acc;
+          }, {})
+        ).sort((a, b) => (b[1] as number) - (a[1] as number));
+
+        const revByState = Object.entries(
+          leadsWithGeo.reduce((acc: Record<string, number>, l) => {
+            acc[l.state] = (acc[l.state] ?? 0) + (l.expected_revenue ?? 0);
+            return acc;
+          }, {})
+        ).sort((a, b) => (b[1] as number) - (a[1] as number));
+
+        const revByCity = Object.entries(
+          leadsWithGeo.reduce((acc: Record<string, number>, l) => {
+            acc[l.city] = (acc[l.city] ?? 0) + (l.expected_revenue ?? 0);
+            return acc;
+          }, {})
+        ).sort((a, b) => (b[1] as number) - (a[1] as number));
+
+        // Lead status distribution
+        const statusDist = [
+          { label: "New", color: "#3B82F6", count: leads.filter((l) => l.status === "new").length },
+          { label: "Contacted", color: "#F59E0B", count: leads.filter((l) => l.status === "contacted").length },
+          { label: "Qualified", color: "#F97316", count: leads.filter((l) => l.status === "qualified").length },
+          { label: "Proposal", color: "#8B5CF6", count: leads.filter((l) => l.status === "proposal").length },
+          { label: "Negotiation", color: "#EC4899", count: leads.filter((l) => l.status === "negotiation").length },
+          { label: "Won", color: "#16A34A", count: leads.filter((l) => l.status === "won").length },
+          { label: "Lost", color: "#EF4444", count: leads.filter((l) => l.status === "lost").length },
+        ].filter((d) => d.count > 0);
+
+        // Top performing schools — sorted by revenue desc, then by volume
+        const topSchools = [...leadsWithGeo]
+          .sort((a, b) => (b.expected_revenue ?? 0) - (a.expected_revenue ?? 0))
+          .slice(0, 15);
+
+        const GeoTable = ({ title, rows, valueLabel, valueFormatter }: { title: string; rows: [string, any][]; valueLabel: string; valueFormatter: (v: any) => string }) => (
+          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #F0EEEC", background: "#FAFAF9" }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>{title}</p>
+              <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>{rows.length} entries</p>
+            </div>
+            <div style={{ maxHeight: 320, overflowY: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+                  <tr style={{ borderBottom: "1px solid #F0EEEC" }}>
+                    <th style={{ textAlign: "left", padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>#</th>
+                    <th style={{ textAlign: "left", padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>Name</th>
+                    <th style={{ textAlign: "right", padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>Schools</th>
+                    <th style={{ textAlign: "right", padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>{valueLabel}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 20).map(([name, val], i) => (
+                    <tr key={name} style={{ borderBottom: "1px solid #FAFAF9", background: i % 2 === 0 ? "#fff" : "#FAFAF9" }}>
+                      <td style={{ padding: "9px 14px", color: "#A8A29E", fontSize: 12 }}>{i + 1}</td>
+                      <td style={{ padding: "9px 14px", fontWeight: 600, color: "#1C1917" }}>{name}</td>
+                      <td style={{ padding: "9px 14px", textAlign: "right", color: "#57534E" }}>{Array.isArray(val) ? val.length : "—"}</td>
+                      <td style={{ padding: "9px 14px", textAlign: "right", fontWeight: 700, color: "#E8611A" }}>{valueFormatter(val)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+
+        return (
+          <div>
+            {/* Report sub-tabs */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 20, background: "#fff", border: "1px solid #E7E5E4", borderRadius: 10, padding: 4, width: "fit-content" }}>
+              {REPORT_TABS.map((rt) => (
+                <button key={rt} onClick={() => setReportTab(rt)} style={{ padding: "8px 18px", fontSize: 13, fontWeight: 600, border: "none", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", background: reportTab === rt ? "#1C1917" : "transparent", color: reportTab === rt ? "#fff" : "#78716C", transition: "all 0.15s" }}>
+                  {rt === "Leads" ? "🎯 " : rt === "Revenue" ? "💰 " : "🏆 "}{rt}
+                </button>
+              ))}
+            </div>
+
+            {/* ── LEADS REPORT ── */}
+            {reportTab === "Leads" && (
+              <div>
+                {/* Status summary bar */}
+                <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🎯 Lead Status Distribution — {leads.length} Total</p>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {statusDist.map((s) => (
+                      <div key={s.label} style={{ flex: 1, minWidth: 100, background: `${s.color}10`, border: `1px solid ${s.color}30`, borderRadius: 10, padding: "14px 12px", textAlign: "center" }}>
+                        <p style={{ fontSize: 28, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.count}</p>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: "#57534E", marginTop: 6 }}>{s.label}</p>
+                        <p style={{ fontSize: 11, color: "#A8A29E", marginTop: 3 }}>{rate(s.count, leads.length)}%</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Status progress bar */}
+                  <div style={{ marginTop: 14, height: 8, borderRadius: 4, overflow: "hidden", display: "flex", gap: 1 }}>
+                    {statusDist.map((s) => (
+                      <div key={s.label} title={`${s.label}: ${s.count}`} style={{ height: "100%", background: s.color, flex: s.count, transition: "flex 0.4s", minWidth: s.count > 0 ? 2 : 0 }} />
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
+                  <GeoTable
+                    title="🌍 Country-wise School Count"
+                    rows={leadsByCountry}
+                    valueLabel="Win Rate"
+                    valueFormatter={(arr) => `${rate(arr.filter((l: any) => l.status === "won").length, arr.length)}%`}
+                  />
+                  <GeoTable
+                    title="🗺️ State-wise School Count"
+                    rows={leadsByState}
+                    valueLabel="Win Rate"
+                    valueFormatter={(arr) => `${rate(arr.filter((l: any) => l.status === "won").length, arr.length)}%`}
+                  />
+                  <GeoTable
+                    title="🏙️ City-wise School Count"
+                    rows={leadsByCity}
+                    valueLabel="Win Rate"
+                    valueFormatter={(arr) => `${rate(arr.filter((l: any) => l.status === "won").length, arr.length)}%`}
+                  />
+                </div>
+
+                {/* Lead status pie + bar combo */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🎯 Status Pie</p>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie data={statusDist.map((s) => ({ name: s.label, value: s.count, color: s.color }))} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
+                          {statusDist.map((s, i) => <Cell key={i} fill={s.color} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 8 }}>
+                      {statusDist.map((s) => (
+                        <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, display: "inline-block", flexShrink: 0 }} />
+                          <span style={{ color: "#57534E", flex: 1 }}>{s.label}</span>
+                          <span style={{ fontWeight: 700, color: "#1C1917" }}>{s.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🏙️ Top 10 Cities by School Count</p>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={leadsByCity.slice(0, 10).map(([city, arr]) => ({ city, count: arr.length, won: arr.filter((l: any) => l.status === "won").length }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="city" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                        <Bar dataKey="count" name="Total" fill="#6366F1" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="won" name="Won" fill="#16A34A" radius={[0, 4, 4, 0]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── REVENUE REPORT ── */}
+            {reportTab === "Revenue" && (
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 }}>
+                  {[
+                    { icon: "₹", label: "Total Pipeline", value: `₹${fmtINR(leads.reduce((s, l) => s + (l.expected_revenue ?? 0), 0))}`, color: "#E8611A", bg: "#FFF7ED" },
+                    { icon: "✅", label: "Won Revenue", value: `₹${fmtINR(leads.filter((l) => l.status === "won").reduce((s, l) => s + (l.expected_revenue ?? 0), 0))}`, color: "#16A34A", bg: "#F0FDF4" },
+                    { icon: "🔥", label: "Active Pipeline", value: `₹${fmtINR(leads.filter((l) => !["won", "lost"].includes(l.status)).reduce((s, l) => s + (l.expected_revenue ?? 0), 0))}`, color: "#F59E0B", bg: "#FFFBEB" },
+                  ].map(({ icon, label, value, color, bg }) => (
+                    <div key={label} style={{ background: bg, border: `1px solid ${color}25`, borderRadius: 12, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+                      <span style={{ fontSize: 30 }}>{icon}</span>
+                      <div>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: "#A8A29E", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</p>
+                        <p style={{ fontSize: 24, fontWeight: 800, color, lineHeight: 1.2 }}>{value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
+                  <GeoTable
+                    title="🌍 Country-wise Revenue"
+                    rows={revByCountry}
+                    valueLabel="Revenue"
+                    valueFormatter={(v) => `₹${fmtINR(v as number)}`}
+                  />
+                  <GeoTable
+                    title="🗺️ State-wise Revenue"
+                    rows={revByState}
+                    valueLabel="Revenue"
+                    valueFormatter={(v) => `₹${fmtINR(v as number)}`}
+                  />
+                  <GeoTable
+                    title="🏙️ City-wise Revenue"
+                    rows={revByCity}
+                    valueLabel="Revenue"
+                    valueFormatter={(v) => `₹${fmtINR(v as number)}`}
+                  />
+                </div>
+
+                {/* Revenue bar charts */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🗺️ Top States by Revenue</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={revByState.slice(0, 8).map(([state, rev]) => ({ state, Revenue: rev as number }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${fmtINR(v)}`} />
+                        <YAxis type="category" dataKey="state" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} formatter={(v: any) => `₹${fmtINR(v)}`} />
+                        <Bar dataKey="Revenue" fill="#E8611A" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🏙️ Top Cities by Revenue</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={revByCity.slice(0, 8).map(([city, rev]) => ({ city, Revenue: rev as number }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${fmtINR(v)}`} />
+                        <YAxis type="category" dataKey="city" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} formatter={(v: any) => `₹${fmtINR(v)}`} />
+                        <Bar dataKey="Revenue" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── TOP PERFORMING ── */}
+            {reportTab === "Top Performing" && (
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 16 }}>
+                  {[
+                    { icon: "🏆", label: "Top School (Revenue)", value: topSchools[0]?.name ?? "—", sub: topSchools[0]?.expected_revenue ? `₹${fmtINR(topSchools[0].expected_revenue)}` : "—", color: "#E8611A" },
+                    { icon: "📍", label: "Top City", value: leadsByCity[0]?.[0] ?? "—", sub: `${(leadsByCity[0]?.[1] as any[])?.length ?? 0} schools`, color: "#6366F1" },
+                    { icon: "🗺️", label: "Top State", value: leadsByState[0]?.[0] ?? "—", sub: `${(leadsByState[0]?.[1] as any[])?.length ?? 0} schools`, color: "#0891B2" },
+                    { icon: "✅", label: "Best Win Rate City", value: (() => { const best = leadsByCity.filter(([, arr]) => (arr as any[]).length >= 2).sort((a, b) => rate((b[1] as any[]).filter((l: any) => l.status === "won").length, (b[1] as any[]).length) - rate((a[1] as any[]).filter((l: any) => l.status === "won").length, (a[1] as any[]).length))[0]; return best?.[0] ?? "—"; })(), sub: (() => { const best = leadsByCity.filter(([, arr]) => (arr as any[]).length >= 2).sort((a, b) => rate((b[1] as any[]).filter((l: any) => l.status === "won").length, (b[1] as any[]).length) - rate((a[1] as any[]).filter((l: any) => l.status === "won").length, (a[1] as any[]).length))[0]; return best ? `${rate((best[1] as any[]).filter((l: any) => l.status === "won").length, (best[1] as any[]).length)}% win rate` : "—"; })(), color: "#16A34A" },
+                  ].map(({ icon, label, value, sub, color }) => (
+                    <div key={label} style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 18 }}>
+                      <div style={{ fontSize: 26, marginBottom: 8 }}>{icon}</div>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: "#A8A29E", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{label}</p>
+                      <p style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1.2 }}>{value}</p>
+                      <p style={{ fontSize: 12, color: "#78716C", marginTop: 4 }}>{sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, overflow: "hidden", marginBottom: 14 }}>
+                  <div style={{ padding: "14px 20px", borderBottom: "1px solid #F0EEEC", background: "#FAFAF9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>🏆 Top Performing Schools</p>
+                      <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>Ranked by expected revenue</p>
+                    </div>
+                    <span style={{ fontSize: 12, color: "#78716C", background: "#F5F4F0", padding: "4px 10px", borderRadius: 8 }}>{topSchools.length} schools</span>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
+                        {["#", "School", "Location", "City", "State", "Revenue", "Volume", "Status", "Cycle"].map((h) => (
+                          <th key={h} style={{ textAlign: "left", padding: "9px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topSchools.map((l, i) => (
+                        <tr key={l.id} style={{ borderBottom: "1px solid #FAFAF9", background: i % 2 === 0 ? "#fff" : "#FAFAF9" }}>
+                          <td style={{ padding: "10px 14px", color: "#A8A29E", fontSize: 12, fontWeight: 700 }}>
+                            {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`}
+                          </td>
+                          <td style={{ padding: "10px 14px", fontWeight: 700, color: "#1C1917" }}>{l.name}</td>
+                          <td style={{ padding: "10px 14px", color: "#78716C", fontSize: 12 }}>{l.location ?? "—"}</td>
+                          <td style={{ padding: "10px 14px", color: "#57534E", fontSize: 12 }}>{l.city}</td>
+                          <td style={{ padding: "10px 14px", color: "#57534E", fontSize: 12 }}>{l.state}</td>
+                          <td style={{ padding: "10px 14px", fontWeight: 700, color: "#16A34A" }}>{l.expected_revenue ? `₹${fmtINR(l.expected_revenue)}` : "—"}</td>
+                          <td style={{ padding: "10px 14px", color: "#57534E" }}>{l.expected_volume ? fmt(l.expected_volume) : "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <span style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 10, fontWeight: 600, background: l.status === "won" ? "#DCFCE7" : l.status === "lost" ? "#FEE2E2" : "#EEF2FF", color: l.status === "won" ? "#15803D" : l.status === "lost" ? "#B91C1C" : "#4338CA" }}>
+                              {l.status.charAt(0).toUpperCase() + l.status.slice(1)}
+                            </span>
+                          </td>
+                          <td style={{ padding: "10px 14px", color: "#A8A29E", fontSize: 12 }}>{l.cycle_label ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* City & State bar charts side by side */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🏙️ City Leaderboard</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={leadsByCity.slice(0, 8).map(([city, arr]) => ({ city, Total: (arr as any[]).length, Won: (arr as any[]).filter((l: any) => l.status === "won").length }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="city" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                        <Bar dataKey="Total" name="Total Schools" fill="#6366F1" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="Won" name="Won" fill="#16A34A" radius={[0, 4, 4, 0]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🗺️ State Leaderboard</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={leadsByState.slice(0, 8).map(([state, arr]) => ({ state, Total: (arr as any[]).length, Won: (arr as any[]).filter((l: any) => l.status === "won").length }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="state" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                        <Bar dataKey="Total" name="Total Schools" fill="#0891B2" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="Won" name="Won" fill="#16A34A" radius={[0, 4, 4, 0]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
