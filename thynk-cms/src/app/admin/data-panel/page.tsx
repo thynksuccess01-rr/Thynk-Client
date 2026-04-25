@@ -273,6 +273,7 @@ interface NumFieldProps {
 
 function NumField({ label, fieldKey, form, onChange }: NumFieldProps) {
   return (
+    <>
     <div>
       <label
         style={{
@@ -1832,6 +1833,7 @@ function CampaignDataSection({
           </div>
         </div>
       )}
+    </>
   );
 }
 
