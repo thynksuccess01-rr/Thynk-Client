@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #FDFAF5;
+  --bg-secondary: #FAF4E8;
+  --text-primary: #1A0F08;
+  --text-secondary: #3D2314;
+  --accent: #A86035;
+  --accent-light: #C27B4A;
+  --border: #EDD9B0;
+  --sidebar-bg: #2C1A0F;
+  --sidebar-text: #FAF4E8;
+  --sidebar-accent: #D4A843;
+
+  /* Client portal (overridable per-client) */
+  --portal-primary: #2C1A0F;
+  --portal-accent: #A86035;
+  --portal-bg: #FDFAF5;
+  --portal-font: 'DM Sans';
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display { font-family: 'Playfair Display', serif; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-light); }
+
+/* Sidebar active link */
+.sidebar-link { @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200; }
+.sidebar-link:hover { background: rgba(212,168,67,0.1); color: var(--sidebar-accent); }
+.sidebar-link.active { background: rgba(212,168,67,0.15); color: var(--sidebar-accent); border-left: 3px solid var(--sidebar-accent); }
+
+/* Cards */
+.card { @apply bg-white rounded-2xl border shadow-sm; border-color: var(--border); }
+.card-cream { background: var(--bg-secondary); @apply rounded-2xl border; border-color: var(--border); }
+
+/* Inputs */
+.input {
+  @apply w-full px-4 py-2.5 rounded-xl border text-sm transition-all duration-200 outline-none;
+  border-color: var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(168,96,53,0.1); }
+
+/* Buttons */
+.btn-primary {
+  @apply px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200;
+  background: var(--accent);
+  color: #FAF4E8;
+}
+.btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(168,96,53,0.25); }
+.btn-secondary {
+  @apply px-5 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200;
+  border-color: var(--border);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-ghost { @apply px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--bg-secondary); }
+
+/* Status badges */
+.badge { @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium; }
+.badge-green { background: #D1FAE5; color: #065F46; }
+.badge-yellow { background: #FEF3C7; color: #92400E; }
+.badge-red { background: #FEE2E2; color: #991B1B; }
+.badge-blue { background: #DBEAFE; color: #1E40AF; }
+.badge-gray { background: #F3F4F6; color: #374151; }
