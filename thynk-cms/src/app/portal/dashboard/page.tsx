@@ -1,219 +1,369 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, Mail, MessageCircle, Phone, Target, ArrowUpRight, ArrowDownRight, Calendar } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+
+const TIMELINES=[{label:"Today",days:1},{label:"Last 5 Days",days:5},{label:"Last 15 Days",days:15},{label:"Last 30 Days",days:30},{label:"Last 90 Days",days:90},{label:"Last 180 Days",days:180},{label:"Current Year",days:365}];
+const TABS=["Summary","Campaigns","Leads","Reports"];
+const fmt=(n:number)=>n>=1000000?`${(n/1000000).toFixed(1)}M`:n>=1000?`${(n/1000).toFixed(1)}K`:String(n??0);
+const fmtINR=(n:number)=>`₹${n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:(n??0)}`;
+const rate=(a:number,b:number)=>b>0?Math.round(a/b*100):0;
 
 export default function PortalDashboard() {
   const [client, setClient] = useState<any>(null);
+  const [products, setProducts] = useState<any[]>([]);
+  const [selProduct, setSelProduct] = useState("all");
+  const [timeline, setTimeline] = useState(30);
+  const [tab, setTab] = useState("Summary");
   const [entries, setEntries] = useState<any[]>([]);
+  const [updates, setUpdates] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [clientId, setClientId] = useState<string|null>(null);
   const supabase = createClient();
 
-  useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: profile } = await supabase.from("profiles").select("client_id,clients(*)").eq("id", user.id).single();
-      if (!profile?.client_id) return;
-      setClient(profile.clients);
-      const [e, l] = await Promise.all([
-        supabase.from("data_entries").select("*").eq("client_id", profile.client_id).order("period_start", { ascending: true }).limit(12),
-        supabase.from("leads").select("*").eq("client_id", profile.client_id).order("created_at", { ascending: false }),
-      ]);
-      setEntries(e.data ?? []);
-      setLeads(l.data ?? []);
-      setLoading(false);
+  useEffect(()=>{
+    async function init(){
+      const {data:{user}}=await supabase.auth.getUser();
+      if(!user) return;
+      const {data:p}=await supabase.from("profiles").select("client_id,clients(*)").eq("id",user.id).single();
+      if(!p?.client_id) return;
+      setClientId(p.client_id); setClient(p.clients);
+      const {data:mp}=await supabase.from("client_products").select("products(id,name)").eq("client_id",p.client_id);
+      setProducts((mp??[]).map((m:any)=>m.products).filter(Boolean));
     }
-    load();
-  }, []);
+    init();
+  },[]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "var(--portal-accent)" }} />
+  const load=useCallback(async()=>{
+    if(!clientId) return;
+    const since=new Date(); since.setDate(since.getDate()-timeline);
+    const s=since.toISOString().split("T")[0];
+    const [e,u,l]=await Promise.all([
+      supabase.from("data_entries").select("*").eq("client_id",clientId).gte("period_start",s).order("period_start"),
+      supabase.from("campaign_updates").select("*").eq("client_id",clientId).gte("update_date",s).order("update_date"),
+      supabase.from("leads").select("*").eq("client_id",clientId).order("created_at",{ascending:false}),
+    ]);
+    setEntries(e.data??[]); setUpdates(u.data??[]); setLeads(l.data??[]);
+  },[clientId,timeline]);
+
+  useEffect(()=>{if(clientId)load();},[load]);
+
+  const accent=client?.accent_color??"#E8611A";
+  const primary=client?.primary_color??"#1C1917";
+
+  const emailSent=entries.reduce((s,e)=>s+e.email_sent,0)+updates.filter(u=>u.channel==="email").reduce((s,u)=>s+u.email_sent,0);
+  const emailOpened=entries.reduce((s,e)=>s+e.email_opened,0)+updates.filter(u=>u.channel==="email").reduce((s,u)=>s+u.email_opened,0);
+  const emailClicked=entries.reduce((s,e)=>s+e.email_clicked,0)+updates.filter(u=>u.channel==="email").reduce((s,u)=>s+u.email_clicked,0);
+  const waSent=entries.reduce((s,e)=>s+e.whatsapp_sent,0)+updates.filter(u=>u.channel==="whatsapp").reduce((s,u)=>s+u.whatsapp_sent,0);
+  const waDelivered=entries.reduce((s,e)=>s+e.whatsapp_delivered,0)+updates.filter(u=>u.channel==="whatsapp").reduce((s,u)=>s+u.whatsapp_delivered,0);
+  const waReplied=entries.reduce((s,e)=>s+e.whatsapp_replied,0)+updates.filter(u=>u.channel==="whatsapp").reduce((s,u)=>s+u.whatsapp_replied,0);
+  const callsMade=entries.reduce((s,e)=>s+e.calls_made,0)+updates.filter(u=>u.channel==="calls").reduce((s,u)=>s+u.calls_made,0);
+  const callsConnected=entries.reduce((s,e)=>s+e.calls_connected,0)+updates.filter(u=>u.channel==="calls").reduce((s,u)=>s+u.calls_connected,0);
+  const callsConverted=entries.reduce((s,e)=>s+e.calls_converted,0)+updates.filter(u=>u.channel==="calls").reduce((s,u)=>s+u.calls_converted,0);
+  const totalRev=entries.reduce((s,e)=>s+(e.total_revenue_collected??0),0);
+  const expectedRev=entries.reduce((s,e)=>s+(e.expected_collection??0),0);
+  const totalLic=entries.reduce((s,e)=>s+(e.total_licences??0),0);
+  const wonLeads=leads.filter(l=>l.status==="won").length;
+  const activeLeads=leads.filter(l=>!["won","lost"].includes(l.status)).length;
+  const lostLeads=leads.filter(l=>l.status==="lost").length;
+  const updatedLeads=leads.filter(l=>l.is_updated_this_cycle).length;
+
+  const chartData=entries.slice(-8).map(e=>({
+    name:new Date(e.period_start).toLocaleDateString("en-IN",{month:"short",day:"numeric"}),
+    Email:e.email_sent,WA:e.whatsapp_sent,Calls:e.calls_made,Revenue:e.total_revenue_collected??0,
+  }));
+
+  const leadPie=[
+    {name:"New",value:leads.filter(l=>l.status==="new").length,color:"#6366F1"},
+    {name:"Active",value:activeLeads,color:"#F59E0B"},
+    {name:"Won",value:wonLeads,color:"#10B981"},
+    {name:"Lost",value:lostLeads,color:"#EF4444"},
+  ].filter(d=>d.value>0);
+
+  const StatCard=({icon,label,value,sub,color,bg}:{icon:string,label:string,value:string|number,sub:string,color:string,bg:string})=>(
+    <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:"16px 14px"}}>
+      <div style={{fontSize:22,marginBottom:6}}>{icon}</div>
+      <p style={{fontSize:10.5,fontWeight:700,color:"#A8A29E",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{label}</p>
+      <p style={{fontSize:26,fontWeight:800,color,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{value}</p>
+      <p style={{fontSize:11.5,color:"#A8A29E",marginTop:5}}>{sub}</p>
     </div>
   );
 
-  const latest = entries[entries.length - 1];
-  const prev = entries[entries.length - 2];
-
-  function pct(curr: number, prev: number) {
-    if (!prev) return null;
-    return Math.round(((curr - prev) / prev) * 100);
-  }
-
-  const totalEmail = entries.reduce((s, e) => s + e.email_sent, 0);
-  const totalWhatsapp = entries.reduce((s, e) => s + e.whatsapp_sent, 0);
-  const totalCalls = entries.reduce((s, e) => s + e.calls_made, 0);
-  const wonLeads = leads.filter(l => l.status === "won").length;
-  const activeLeads = leads.filter(l => !["won","lost"].includes(l.status)).length;
-
-  const chartData = entries.slice(-6).map(e => ({
-    name: new Date(e.period_start).toLocaleDateString("en-IN", { month: "short" }),
-    Email: e.email_sent,
-    WhatsApp: e.whatsapp_sent,
-    Calls: e.calls_made,
-  }));
-
-  const leadStatusData = [
-    { name: "New", value: leads.filter(l => l.status === "new").length, color: "#3B82F6" },
-    { name: "In Progress", value: leads.filter(l => ["contacted","qualified","proposal","negotiation"].includes(l.status)).length, color: "#F59E0B" },
-    { name: "Won", value: wonLeads, color: "#10B981" },
-    { name: "Lost", value: leads.filter(l => l.status === "lost").length, color: "#EF4444" },
-  ].filter(d => d.value > 0);
-
-  const accent = client?.accent_color ?? "#A86035";
-  const primary = client?.primary_color ?? "#2C1A0F";
-
-  const statCards = [
-    {
-      label: "Emails Sent", value: totalEmail.toLocaleString(), icon: Mail, color: "#1E40AF", bg: "#DBEAFE",
-      sub: latest ? `${latest.email_sent} this period` : "—",
-      change: latest && prev ? pct(latest.email_sent, prev.email_sent) : null,
-    },
-    {
-      label: "WhatsApp Sent", value: totalWhatsapp.toLocaleString(), icon: MessageCircle, color: "#065F46", bg: "#D1FAE5",
-      sub: latest ? `${latest.whatsapp_sent} this period` : "—",
-      change: latest && prev ? pct(latest.whatsapp_sent, prev.whatsapp_sent) : null,
-    },
-    {
-      label: "Calls Made", value: totalCalls.toLocaleString(), icon: Phone, color: "#7C2D12", bg: "#FEE2E2",
-      sub: latest ? `${latest.calls_made} this period` : "—",
-      change: latest && prev ? pct(latest.calls_made, prev.calls_made) : null,
-    },
-    {
-      label: "Active Leads", value: activeLeads.toString(), icon: Target, color: "#92400E", bg: "#FEF3C7",
-      sub: `${wonLeads} won total`,
-      change: null,
-    },
-  ];
-
   return (
-    <div className="animate-fade-in">
+    <div>
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-display font-semibold" style={{ color: "#1A0F08" }}>
-          Welcome back, {client?.name} 👋
-        </h1>
-        <p className="text-sm mt-1" style={{ color: accent }}>
-          {latest ? `Latest period: ${new Date(latest.period_start).toLocaleDateString("en-IN", { month: "long", day: "numeric" })} – ${new Date(latest.period_end).toLocaleDateString("en-IN", { month: "long", day: "numeric", year: "numeric" })}` : "No data entries yet"}
-        </p>
-      </div>
-
-      {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {statCards.map(({ label, value, icon: Icon, color, bg, sub, change }) => (
-          <div key={label} className="card p-5 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
-            <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: bg }}>
-                <Icon size={18} style={{ color }} />
-              </div>
-              {change !== null && (
-                <div className={`flex items-center gap-0.5 text-xs font-medium ${change >= 0 ? "text-green-600" : "text-red-500"}`}>
-                  {change >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-                  {Math.abs(change)}%
-                </div>
-              )}
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20}}>
+        <div>
+          <h1 style={{fontSize:24,fontWeight:800,color:"#1C1917"}}>
+            {client?.name??""} <span style={{color:accent}}>Dashboard</span>
+          </h1>
+          <p style={{fontSize:13,color:"#78716C",marginTop:2}}>
+            {entries.length} periods · {leads.length} leads · {fmtINR(totalRev)} collected
+            {updatedLeads>0&&<span style={{marginLeft:8,fontSize:11,background:"#FEF3C7",color:"#92400E",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{updatedLeads} LEADS UPDATED</span>}
+          </p>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          {products.length>1&&(
+            <div style={{position:"relative"}}>
+              <select value={selProduct} onChange={e=>setSelProduct(e.target.value)}
+                style={{appearance:"none",padding:"8px 32px 8px 12px",background:"#fff",border:"1px solid #E7E5E4",borderRadius:8,fontSize:13,color:"#1C1917",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>
+                <option value="all">All Products</option>
+                {products.map((p:any)=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <ChevronDown size={13} style={{position:"absolute",right:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:"#78716C"}}/>
             </div>
-            <p className="text-2xl font-display font-semibold" style={{ color: "#1A0F08" }}>{value}</p>
-            <p className="text-xs font-medium mt-0.5" style={{ color: accent }}>{label}</p>
-            <p className="text-xs mt-1" style={{ color: "#6B7280" }}>{sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-3 gap-5 mb-6">
-        {/* Activity chart */}
-        <div className="card p-5 col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-semibold text-sm" style={{ color: "#1A0F08" }}>Campaign Activity (Last 6 Periods)</h2>
-          </div>
-          {chartData.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-sm" style={{ color: accent }}>No data yet</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} barSize={8} barGap={4}>
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#A86035" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#A86035" }} axisLine={false} tickLine={false} width={35} />
-                <Tooltip contentStyle={{ background: "#1A0F08", border: "none", borderRadius: "8px", color: "#FAF4E8", fontSize: "12px" }} />
-                <Bar dataKey="Email" fill="#3B82F6" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="WhatsApp" fill="#10B981" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Calls" fill={accent} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
           )}
-          <div className="flex gap-4 mt-2 justify-center">
-            {[["Email","#3B82F6"],["WhatsApp","#10B981"],["Calls",accent]].map(([l,c]) => (
-              <div key={l} className="flex items-center gap-1.5 text-xs" style={{ color: "#6B7280" }}>
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />
-                {l}
-              </div>
+          <div style={{display:"flex",gap:3,background:"#fff",border:"1px solid #E7E5E4",borderRadius:8,padding:3}}>
+            {TIMELINES.map(t=>(
+              <button key={t.days} onClick={()=>setTimeline(t.days)}
+                style={{padding:"5px 10px",fontSize:11.5,border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:600,borderRadius:6,background:timeline===t.days?primary:"transparent",color:timeline===t.days?"#fff":"#78716C",transition:"all 0.15s",whiteSpace:"nowrap"}}>
+                {t.label}
+              </button>
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Lead status donut */}
-        <div className="card p-5">
-          <h2 className="font-display font-semibold text-sm mb-4" style={{ color: "#1A0F08" }}>Lead Pipeline</h2>
-          {leadStatusData.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-sm" style={{ color: accent }}>No leads yet</div>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie data={leadStatusData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
-                    {leadStatusData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "#1A0F08", border: "none", borderRadius: "8px", color: "#FAF4E8", fontSize: "12px" }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-1.5 mt-2">
-                {leadStatusData.map(d => (
-                  <div key={d.name} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-                      <span style={{ color: "#3D2314" }}>{d.name}</span>
-                    </div>
-                    <span className="font-medium" style={{ color: "#1A0F08" }}>{d.value}</span>
+      {/* Tabs */}
+      <div style={{display:"flex",borderBottom:"2px solid #E7E5E4",marginBottom:20}}>
+        {TABS.map(t=>(
+          <button key={t} onClick={()=>setTab(t)}
+            style={{padding:"10px 20px",fontSize:13.5,fontWeight:600,border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",color:tab===t?accent:"#78716C",borderBottom:tab===t?`2px solid ${accent}`:"2px solid transparent",marginBottom:-2,transition:"all 0.15s"}}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* SUMMARY */}
+      {tab==="Summary"&&(
+        <>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:10,marginBottom:20}}>
+            <StatCard icon="📧" label="Emails Sent" value={fmt(emailSent)} sub={`${rate(emailOpened,emailSent)}% opened`} color="#2563EB" bg="#EFF6FF"/>
+            <StatCard icon="👁️" label="Opened" value={fmt(emailOpened)} sub={`${rate(emailClicked,emailOpened)}% clicked`} color="#6366F1" bg="#EEF2FF"/>
+            <StatCard icon="💬" label="WhatsApp" value={fmt(waSent)} sub={`${rate(waDelivered,waSent)}% delivered`} color="#16A34A" bg="#F0FDF4"/>
+            <StatCard icon="↩️" label="WA Replied" value={fmt(waReplied)} sub={`${rate(waReplied,waSent)}% reply rate`} color="#0891B2" bg="#ECFEFF"/>
+            <StatCard icon="📞" label="Calls Made" value={fmt(callsMade)} sub={`${rate(callsConnected,callsMade)}% connected`} color="#7C3AED" bg="#F5F3FF"/>
+            <StatCard icon="🎯" label="Active Leads" value={activeLeads} sub={`${wonLeads} won`} color={accent} bg="#FFF7ED"/>
+            <StatCard icon="₹" label="Collected" value={fmtINR(totalRev)} sub="revenue" color="#D97706" bg="#FFFBEB"/>
+            <StatCard icon="📦" label="Licences" value={fmt(totalLic)} sub="units sold" color="#BE185D" bg="#FDF2F8"/>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:16,marginBottom:20}}>
+            <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:18}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                <p style={{fontSize:13,fontWeight:700,color:"#1C1917",display:"flex",alignItems:"center",gap:6}}><span>📊</span> Campaign Activity</p>
+                <div style={{display:"flex",gap:10}}>
+                  {[["Email","#3B82F6"],["WA","#10B981"],["Calls",accent]].map(([l,c])=>(
+                    <span key={l} style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:"#78716C"}}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:c,display:"inline-block"}}/>{l}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {chartData.length===0?<div style={{height:180,display:"flex",alignItems:"center",justifyContent:"center",color:"#A8A29E",fontSize:13}}>No data yet</div>:(
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={chartData} barSize={7} barGap={2}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false}/>
+                    <XAxis dataKey="name" tick={{fontSize:10,fill:"#A8A29E"}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fontSize:10,fill:"#A8A29E"}} axisLine={false} tickLine={false} width={28}/>
+                    <Tooltip contentStyle={{background:"#1C1917",border:"none",borderRadius:8,color:"#F5F4F0",fontSize:12}}/>
+                    <Bar dataKey="Email" fill="#3B82F6" radius={[3,3,0,0]}/>
+                    <Bar dataKey="WA" fill="#10B981" radius={[3,3,0,0]}/>
+                    <Bar dataKey="Calls" fill={accent} radius={[3,3,0,0]}/>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:18}}>
+              <p style={{fontSize:13,fontWeight:700,color:"#1C1917",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><span>🎯</span> Lead Status</p>
+              {leadPie.length===0?<div style={{height:130,display:"flex",alignItems:"center",justifyContent:"center",color:"#A8A29E",fontSize:13}}>No leads</div>:(
+                <>
+                  <ResponsiveContainer width="100%" height={120}>
+                    <PieChart><Pie data={leadPie} cx="50%" cy="50%" innerRadius={32} outerRadius={52} paddingAngle={3} dataKey="value">
+                      {leadPie.map((e,i)=><Cell key={i} fill={e.color}/>)}
+                    </Pie><Tooltip contentStyle={{background:"#1C1917",border:"none",borderRadius:8,color:"#F5F4F0",fontSize:12}}/></PieChart>
+                  </ResponsiveContainer>
+                  <div style={{display:"flex",flexDirection:"column",gap:5,marginTop:6}}>
+                    {leadPie.map(d=>(
+                      <div key={d.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12}}>
+                        <span style={{display:"flex",alignItems:"center",gap:5,color:"#57534E"}}><span style={{width:8,height:8,borderRadius:2,background:d.color,display:"inline-block"}}/>{d.name}</span>
+                        <span style={{fontWeight:700,color:"#1C1917"}}>{d.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:18}}>
+              <p style={{fontSize:13,fontWeight:700,color:"#1C1917",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><span>💰</span> Revenue</p>
+              <div style={{textAlign:"center",padding:"12px 0",borderBottom:"1px solid #F5F4F0",marginBottom:12}}>
+                <p style={{fontSize:26,fontWeight:800,color:"#16A34A"}}>{fmtINR(totalRev)}</p>
+                <p style={{fontSize:11.5,color:"#78716C",marginTop:3}}>Collected</p>
+              </div>
+              <div style={{textAlign:"center",padding:"12px 0",borderBottom:"1px solid #F5F4F0",marginBottom:12}}>
+                <p style={{fontSize:22,fontWeight:700,color:"#D97706"}}>{fmtINR(expectedRev)}</p>
+                <p style={{fontSize:11.5,color:"#78716C",marginTop:3}}>Expected</p>
+              </div>
+              <div style={{textAlign:"center"}}>
+                <p style={{fontSize:22,fontWeight:700,color:"#2563EB"}}>{totalLic.toLocaleString("en-IN")}</p>
+                <p style={{fontSize:11.5,color:"#78716C",marginTop:3}}>Licences</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Conversion funnel */}
+          <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:20,marginBottom:20}}>
+            <p style={{fontSize:12,fontWeight:700,color:"#A8A29E",letterSpacing:"0.08em",marginBottom:16}}>CAMPAIGN → CONVERSION FUNNEL</p>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              {[
+                {icon:"📧",label:"Emails Sent",value:emailSent,sub:`Total outreach`,color:"#6366F1",bg:"#EEF2FF"},
+                {icon:"👁️",label:"Opened",value:emailOpened,sub:`${rate(emailOpened,emailSent)}% rate`,color:"#F59E0B",bg:"#FFFBEB"},
+                {icon:"💬",label:"WA Delivered",value:waDelivered,sub:`${rate(waDelivered,waSent)}% rate`,color:"#10B981",bg:"#ECFDF5"},
+                {icon:"↩️",label:"WA Replied",value:waReplied,sub:`${rate(waReplied,waSent)}% rate`,color:"#0891B2",bg:"#ECFEFF"},
+                {icon:"📞",label:"Calls Connected",value:callsConnected,sub:`${rate(callsConnected,callsMade)}% rate`,color:"#3B82F6",bg:"#EFF6FF"},
+                {icon:"🏆",label:"Leads Won",value:wonLeads,sub:`${rate(wonLeads,leads.length)}% win rate`,color:"#16A34A",bg:"#F0FDF4"},
+              ].map(({icon,label,value,sub,color,bg},i,arr)=>(
+                <div key={label} style={{display:"flex",alignItems:"center",flex:1,gap:6}}>
+                  <div style={{flex:1,background:bg,border:`1px solid ${color}25`,borderRadius:10,padding:"14px 10px",textAlign:"center"}}>
+                    <div style={{fontSize:22,marginBottom:6}}>{icon}</div>
+                    <p style={{fontSize:20,fontWeight:800,color,lineHeight:1}}>{fmt(value)}</p>
+                    <p style={{fontSize:12,fontWeight:600,color:"#1C1917",marginTop:5}}>{label}</p>
+                    <p style={{fontSize:11,color:"#78716C",marginTop:2}}>{sub}</p>
+                  </div>
+                  {i<arr.length-1&&<span style={{fontSize:16,color:"#D6D3D1",flexShrink:0}}>→</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Updated leads highlight */}
+          {updatedLeads>0&&(
+            <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:12,padding:16,marginBottom:16}}>
+              <p style={{fontSize:13,fontWeight:700,color:"#92400E",marginBottom:10}}>⚡ {updatedLeads} Lead{updatedLeads>1?"s":""} Updated Across Cycles</p>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {leads.filter(l=>l.is_updated_this_cycle).map(l=>(
+                  <div key={l.id} style={{background:"#fff",border:"1px solid #FDE68A",borderRadius:8,padding:"8px 12px"}}>
+                    <p style={{fontSize:13,fontWeight:600,color:"#1C1917"}}>{l.name}</p>
+                    <p style={{fontSize:12,color:"#78716C",marginTop:2}}>
+                      <span style={{background:"#FEE2E2",color:"#B91C1C",padding:"1px 5px",borderRadius:4,fontSize:11}}>{l.previous_status}</span>
+                      {" → "}
+                      <span style={{background:"#DCFCE7",color:"#15803D",padding:"1px 5px",borderRadius:4,fontSize:11}}>{l.status}</span>
+                      {l.cycle_label&&<span style={{color:"#A8A29E",fontSize:11,marginLeft:4}}>· {l.cycle_label}</span>}
+                    </p>
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
 
-      {/* Conversion rates */}
-      {latest && (
-        <div className="card p-5">
-          <h2 className="font-display font-semibold text-sm mb-4" style={{ color: "#1A0F08" }}>
-            Latest Period Conversion Rates
-            <span className="ml-2 text-xs font-normal" style={{ color: accent }}>
-              {new Date(latest.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" })} – {new Date(latest.period_end).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
-            </span>
-          </h2>
-          <div className="grid grid-cols-3 gap-6">
-            {[
-              { label: "Email Open Rate", sent: latest.email_sent, achieved: latest.email_opened, color: "#3B82F6" },
-              { label: "WhatsApp Reply Rate", sent: latest.whatsapp_sent, achieved: latest.whatsapp_replied, color: "#10B981" },
-              { label: "Call Connect Rate", sent: latest.calls_made, achieved: latest.calls_connected, color: accent },
-            ].map(({ label, sent, achieved, color }) => {
-              const rate = sent > 0 ? Math.round((achieved / sent) * 100) : 0;
-              return (
-                <div key={label}>
-                  <div className="flex justify-between items-center mb-1.5">
-                    <span className="text-xs font-medium" style={{ color: "#3D2314" }}>{label}</span>
-                    <span className="text-sm font-semibold" style={{ color }}>{rate}%</span>
+      {/* CAMPAIGNS TAB */}
+      {tab==="Campaigns"&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
+          {[
+            {icon:"📧",title:"Email Campaign",color:"#2563EB",bg:"#EFF6FF",border:"#BFDBFE",stats:[["Sent",emailSent],["Opened",emailOpened],["Clicked",emailClicked],["Open Rate",`${rate(emailOpened,emailSent)}%`],["Click Rate",`${rate(emailClicked,emailSent)}%`]]},
+            {icon:"💬",title:"WhatsApp Campaign",color:"#16A34A",bg:"#F0FDF4",border:"#A7F3D0",stats:[["Sent",waSent],["Delivered",waDelivered],["Replied",waReplied],["Delivery Rate",`${rate(waDelivered,waSent)}%`],["Reply Rate",`${rate(waReplied,waSent)}%`]]},
+            {icon:"📞",title:"Calls",color:"#7C3AED",bg:"#F5F3FF",border:"#DDD6FE",stats:[["Made",callsMade],["Connected",callsConnected],["Converted",callsConverted],["Connect Rate",`${rate(callsConnected,callsMade)}%`],["Conversion",`${rate(callsConverted,callsMade)}%`]]},
+          ].map(({icon,title,color,bg,border,stats})=>(
+            <div key={title} style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,overflow:"hidden"}}>
+              <div style={{background:bg,border:`1px solid ${border}`,padding:"16px 20px",display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:26}}>{icon}</span>
+                <p style={{fontSize:15,fontWeight:700,color}}>{title}</p>
+              </div>
+              <div style={{padding:20}}>
+                {stats.map(([l,v])=>(
+                  <div key={l as string} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid #F5F4F0"}}>
+                    <span style={{fontSize:13,color:"#78716C"}}>{l as string}</span>
+                    <span style={{fontSize:16,fontWeight:800,color,fontVariantNumeric:"tabular-nums"}}>{typeof v==="number"?fmt(v):v}</span>
                   </div>
-                  <div className="h-2 rounded-full" style={{ background: "#EDD9B0" }}>
-                    <div className="h-2 rounded-full transition-all duration-700" style={{ width: `${rate}%`, background: color }} />
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: "#9CA3AF" }}>{achieved.toLocaleString()} / {sent.toLocaleString()}</p>
+                ))}
+                <div style={{marginTop:16,height:6,background:"#F5F4F0",borderRadius:3}}>
+                  <div style={{height:6,background:color,borderRadius:3,width:`${Math.min(rate(stats[1][1] as number,stats[0][1] as number),100)}%`,transition:"width 0.6s"}}/>
                 </div>
-              );
-            })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* LEADS TAB */}
+      {tab==="Leads"&&(
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:20}}>
+            {[{icon:"📥",label:"Total",v:leads.length,color:"#6366F1"},{icon:"🔵",label:"New",v:leads.filter(l=>l.status==="new").length,color:"#3B82F6"},{icon:"🟡",label:"Active",v:activeLeads,color:"#F59E0B"},{icon:"✅",label:"Won",v:wonLeads,color:"#16A34A"},{icon:"❌",label:"Lost",v:lostLeads,color:"#EF4444"}].map(({icon,label,v,color})=>(
+              <div key={label} style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:18,textAlign:"center"}}>
+                <div style={{fontSize:26,marginBottom:8}}>{icon}</div>
+                <p style={{fontSize:28,fontWeight:800,color,lineHeight:1}}>{v}</p>
+                <p style={{fontSize:12.5,color:"#78716C",marginTop:6,fontWeight:600}}>{label}</p>
+              </div>
+            ))}
+          </div>
+          <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:20}}>
+            {leads.length===0?<p style={{textAlign:"center",color:"#A8A29E",padding:"40px 0",fontSize:13}}>No leads yet</p>:(
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead><tr style={{background:"#FAFAF9",borderBottom:"1px solid #F0EEEC"}}>
+                  {["Lead","Status","Location","Revenue","Cycle","Progress"].map(h=>(
+                    <th key={h} style={{textAlign:"left",padding:"9px 12px",fontSize:11.5,fontWeight:600,color:"#A8A29E"}}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {leads.map(l=>(
+                    <tr key={l.id} style={{borderBottom:"1px solid #FAFAF9",background:l.is_updated_this_cycle?"#FFFBEB":"transparent"}}>
+                      <td style={{padding:"10px 12px",fontWeight:600,color:"#1C1917"}}>
+                        {l.name}{l.is_updated_this_cycle&&<span style={{marginLeft:5,fontSize:10,background:"#FEF3C7",color:"#92400E",padding:"1px 6px",borderRadius:8,fontWeight:700}}>UPDATED</span>}
+                      </td>
+                      <td style={{padding:"10px 12px"}}><span style={{fontSize:11.5,padding:"3px 9px",borderRadius:10,fontWeight:600,background:l.status==="won"?"#DCFCE7":l.status==="lost"?"#FEE2E2":"#EEF2FF",color:l.status==="won"?"#15803D":l.status==="lost"?"#B91C1C":"#4338CA"}}>{l.status.charAt(0).toUpperCase()+l.status.slice(1)}</span></td>
+                      <td style={{padding:"10px 12px",color:"#78716C",fontSize:12.5}}>{l.location??"—"}</td>
+                      <td style={{padding:"10px 12px",fontWeight:600,color:"#16A34A"}}>{l.expected_revenue?fmtINR(l.expected_revenue):"—"}</td>
+                      <td style={{padding:"10px 12px",color:"#A8A29E",fontSize:12}}>{l.cycle_label??"—"}</td>
+                      <td style={{padding:"10px 12px",fontSize:12}}>
+                        {l.previous_status&&l.previous_status!==l.status?<span><span style={{background:"#FEE2E2",color:"#B91C1C",padding:"1px 5px",borderRadius:4,fontSize:11}}>{l.previous_status}</span> → <span style={{background:"#DCFCE7",color:"#15803D",padding:"1px 5px",borderRadius:4,fontSize:11}}>{l.status}</span></span>:<span style={{color:"#D6D3D1"}}>—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* REPORTS TAB */}
+      {tab==="Reports"&&(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:20}}>
+            <p style={{fontSize:13,fontWeight:700,color:"#1C1917",marginBottom:16}}>📈 Campaign Trend</p>
+            {chartData.length===0?<div style={{height:200,display:"flex",alignItems:"center",justifyContent:"center",color:"#A8A29E",fontSize:13}}>No data</div>:(
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false}/>
+                  <XAxis dataKey="name" tick={{fontSize:11,fill:"#A8A29E"}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:11,fill:"#A8A29E"}} axisLine={false} tickLine={false} width={28}/>
+                  <Tooltip contentStyle={{background:"#1C1917",border:"none",borderRadius:8,color:"#F5F4F0",fontSize:12}}/>
+                  <Line type="monotone" dataKey="Email" stroke="#3B82F6" strokeWidth={2} dot={false}/>
+                  <Line type="monotone" dataKey="WA" stroke="#10B981" strokeWidth={2} dot={false}/>
+                  <Line type="monotone" dataKey="Calls" stroke={accent} strokeWidth={2} dot={false}/>
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:20}}>
+            <p style={{fontSize:13,fontWeight:700,color:"#1C1917",marginBottom:16}}>💰 Revenue Timeline</p>
+            {chartData.length===0?<div style={{height:200,display:"flex",alignItems:"center",justifyContent:"center",color:"#A8A29E",fontSize:13}}>No data</div>:(
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false}/>
+                  <XAxis dataKey="name" tick={{fontSize:11,fill:"#A8A29E"}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:11,fill:"#A8A29E"}} axisLine={false} tickLine={false} width={50} tickFormatter={(v)=>fmtINR(v)}/>
+                  <Tooltip contentStyle={{background:"#1C1917",border:"none",borderRadius:8,color:"#F5F4F0",fontSize:12}} formatter={(v:any)=>fmtINR(v)}/>
+                  <Line type="monotone" dataKey="Revenue" stroke="#16A34A" strokeWidth={3} dot={{r:4,fill:"#16A34A"}} activeDot={{r:6}}/>
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       )}
