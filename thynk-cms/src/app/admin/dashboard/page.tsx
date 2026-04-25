@@ -148,7 +148,11 @@ export default function AdminDashboard() {
 
   const clientRevData = clients.slice(0, 6).map((c) => {
     const cEntries = entries.filter((e) => e.client_id === c.id);
-    return { name: c.name.split(" ")[0], Revenue: cEntries.reduce((s, e) => s + (e.total_revenue_collected ?? 0), 0), Leads: leads.filter((l) => l.client_id === c.id).length };
+    const cLeads = leads.filter((l) => l.client_id === c.id);
+    // Use lead-level revenue_collected if available, fallback to entry total
+    const leadRev = cLeads.reduce((s, l) => s + (l.revenue_collected ?? 0), 0);
+    const entryRev = cEntries.reduce((s, e) => s + (e.total_revenue_collected ?? 0), 0);
+    return { name: c.name.split(" ")[0], Revenue: leadRev > 0 ? leadRev : entryRev, Leads: cLeads.length };
   }).filter((d) => d.Revenue > 0 || d.Leads > 0).sort((a, b) => b.Revenue - a.Revenue);
 
   const Card = ({ icon, label, value, sub, color }: any) => (

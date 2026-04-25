@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, Save, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Save, Trash2, ChevronDown, ChevronRight, Search, X, IndianRupee } from "lucide-react";
 import toast from "react-hot-toast";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -56,6 +56,8 @@ interface Lead {
   data_entry_id?: string | null;
   name: string;
   location?: string;
+  country?: string;
+  state?: string;
   expected_volume?: number | null;
   expected_revenue?: number | null;
   status: LeadStatus;
@@ -63,6 +65,7 @@ interface Lead {
   cycle_label?: string;
   previous_status?: string;
   is_updated_this_cycle?: boolean;
+  revenue_collected?: number | null;
   status_updated_at?: string;
   updated_at?: string;
 }
@@ -100,6 +103,8 @@ interface EntryForm {
 
 interface LeadForm {
   name: string;
+  country: string;
+  state: string;
   location: string;
   expected_volume: string;
   expected_revenue: string;
@@ -139,6 +144,8 @@ const EMPTY_ENTRY: EntryForm = {
 
 const EMPTY_LEAD: LeadForm = {
   name: "",
+  country: "",
+  state: "",
   location: "",
   expected_volume: "",
   expected_revenue: "",
@@ -306,6 +313,12 @@ export default function DataPanelPage() {
   const [showUpdateForm, setShowUpdateForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string>("a");
+  // Revenue modal state
+  const [showRevenueModal, setShowRevenueModal] = useState(false);
+  const [allClientLeads, setAllClientLeads] = useState<Lead[]>([]);
+  const [revenueSearch, setRevenueSearch] = useState("");
+  const [revenueEdits, setRevenueEdits] = useState<Record<string, string>>({});
+  const [savingRevenue, setSavingRevenue] = useState(false);
 
   const supabase = createClient();
 
@@ -361,6 +374,88 @@ export default function DataPanelPage() {
       .order("update_date")
       .order("created_at");
     setUpdates(data ?? []);
+  }
+
+  async function openRevenueModal() {
+    if (!selectedClient) { toast.error("Select a client first"); return; }
+    // Load ALL leads for this client (not just current period) for cross-period revenue assignment
+    const { data } = await supabase
+      .from("leads")
+      .select("*")
+      .eq("client_id", selectedClient)
+      .order("status")
+      .order("name");
+    setAllClientLeads(data ?? []);
+    // Pre-populate edits with existing revenue values
+    const existing: Record<string, string> = {};
+    (data ?? []).forEach((l: Lead) => {
+      if (l.revenue_collected != null && l.revenue_collected > 0) {
+        existing[l.id] = String(l.revenue_collected);
+      }
+    });
+    setRevenueEdits(existing);
+    setRevenueSearch("");
+    setShowRevenueModal(true);
+  }
+
+  async function saveRevenueToLeads() {
+    if (!activeEntry || activeEntry === "new") {
+      toast.error("Save the period first");
+      return;
+    }
+    setSavingRevenue(true);
+    try {
+      // Update revenue_collected on each edited lead
+      const updates_arr = Object.entries(revenueEdits).map(([id, val]) => ({
+        id,
+        revenue_collected: val === "" ? 0 : Number(val),
+        updated_at: new Date().toISOString(),
+      }));
+      for (const upd of updates_arr) {
+        await supabase.from("leads").update({
+          revenue_collected: upd.revenue_collected,
+          updated_at: upd.updated_at,
+        }).eq("id", upd.id);
+      }
+      // Recompute total: sum all leads for this client that have revenue_collected > 0
+      // and are linked to this entry
+      const { data: linkedLeads } = await supabase
+        .from("leads")
+        .select("revenue_collected")
+        .eq("client_id", selectedClient);
+      const total = (linkedLeads ?? []).reduce(
+        (s: number, l: any) => s + (l.revenue_collected ?? 0), 0
+      );
+      // Also compute expected from leads expected_revenue
+      const { data: expLeads } = await supabase
+        .from("leads")
+        .select("expected_revenue")
+        .eq("client_id", selectedClient)
+        .not("status", "in", '("lost")');
+      const expected = (expLeads ?? []).reduce(
+        (s: number, l: any) => s + (l.expected_revenue ?? 0), 0
+      );
+      // Update period entry totals
+      await supabase.from("data_entries").update({
+        total_revenue_collected: total,
+        expected_collection: expected,
+        updated_at: new Date().toISOString(),
+      }).eq("id", activeEntry);
+      // Sync local form state
+      setForm(prev => ({
+        ...prev,
+        total_revenue_collected: total,
+        expected_collection: expected,
+      }));
+      toast.success("Revenue updated across leads & period");
+      setShowRevenueModal(false);
+      loadLeads();
+      loadEntries();
+    } catch (e: any) {
+      toast.error(e.message ?? "Error saving revenue");
+    } finally {
+      setSavingRevenue(false);
+    }
   }
 
   // ─── CRUD: Entries ───────────────────────────────────────────────────────────
@@ -501,12 +596,15 @@ export default function DataPanelPage() {
       toast.error("Lead name required");
       return;
     }
+    if (!activeEntry || activeEntry === "new") {
+      toast.error("Please select or save a period first before adding a lead");
+      return;
+    }
 
     const payload = {
       ...newLead,
       client_id: selectedClient,
-      data_entry_id:
-        activeEntry && activeEntry !== "new" ? activeEntry : null,
+      data_entry_id: activeEntry,
       expected_volume: newLead.expected_volume
         ? Number(newLead.expected_volume)
         : null,
@@ -776,18 +874,35 @@ export default function DataPanelPage() {
                     form={form}
                     onChange={(k, v) => handleEntryFormChange(k, v)}
                   />
-                  <NumField
-                    label="Revenue Collected (₹)"
-                    fieldKey="total_revenue_collected"
-                    form={form}
-                    onChange={(k, v) => handleEntryFormChange(k, v)}
-                  />
-                  <NumField
-                    label="Expected Collection (₹)"
-                    fieldKey="expected_collection"
-                    form={form}
-                    onChange={(k, v) => handleEntryFormChange(k, v)}
-                  />
+                  {/* Revenue Collected — driven by Lead Revenue Picker */}
+                  <div>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
+                      Revenue Collected (₹)
+                    </label>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <div style={{ flex: 1, background: "#F9F8F7", border: "1px solid #E7E5E4", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 700, color: "#16A34A" }}>
+                        ₹{(form.total_revenue_collected ?? 0).toLocaleString("en-IN")}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={openRevenueModal}
+                        style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                      >
+                        <IndianRupee size={13} /> Set via Leads
+                      </button>
+                    </div>
+                    <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 4 }}>Auto-summed from lead revenue entries</p>
+                  </div>
+                  {/* Expected Collection — auto-computed from lead expected_revenue */}
+                  <div>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
+                      Expected Collection (₹)
+                    </label>
+                    <div style={{ flex: 1, background: "#F9F8F7", border: "1px solid #E7E5E4", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 700, color: "#D97706" }}>
+                      ₹{(form.expected_collection ?? 0).toLocaleString("en-IN")}
+                    </div>
+                    <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 4 }}>Auto-summed from lead expected revenue</p>
+                  </div>
                 </div>
               </Section>
 
@@ -1581,6 +1696,142 @@ function CampaignDataSection({
         </div>
       )}
     </div>
+      {/* ═══ REVENUE MODAL ═══ */}
+      {showRevenueModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {/* Backdrop */}
+          <div onClick={() => setShowRevenueModal(false)}
+            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }} />
+          {/* Modal */}
+          <div style={{ position: "relative", background: "#fff", borderRadius: 16, width: "min(680px, 95vw)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.25)", overflow: "hidden" }}>
+            {/* Header */}
+            <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #F0EEEC", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1C1917", margin: 0 }}>💰 Revenue Entry — via Leads</h2>
+                <p style={{ fontSize: 12.5, color: "#78716C", marginTop: 4 }}>Search & select a lead, then enter the revenue collected from that lead. Period totals update automatically.</p>
+              </div>
+              <button onClick={() => setShowRevenueModal(false)}
+                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, borderRadius: 8, display: "flex" }}>
+                <X size={18} color="#78716C" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div style={{ padding: "14px 24px 10px", borderBottom: "1px solid #F5F4F0", flexShrink: 0 }}>
+              <div style={{ position: "relative" }}>
+                <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "#A8A29E" }} />
+                <input
+                  type="text"
+                  value={revenueSearch}
+                  onChange={e => setRevenueSearch(e.target.value)}
+                  placeholder="Search leads by name, location, status..."
+                  autoFocus
+                  style={{ width: "100%", paddingLeft: 34, padding: "9px 14px 9px 34px", border: "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+              {/* Summary bar */}
+              <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+                <span style={{ fontSize: 11.5, color: "#78716C" }}>
+                  <strong style={{ color: "#16A34A" }}>₹{Object.values(revenueEdits).reduce((s, v) => s + (Number(v) || 0), 0).toLocaleString("en-IN")}</strong> total entered
+                </span>
+                <span style={{ fontSize: 11.5, color: "#78716C" }}>
+                  <strong style={{ color: "#E8611A" }}>{Object.values(revenueEdits).filter(v => Number(v) > 0).length}</strong> leads with revenue
+                </span>
+                <span style={{ fontSize: 11.5, color: "#A8A29E" }}>{allClientLeads.length} leads total</span>
+              </div>
+            </div>
+
+            {/* Lead List */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+              {allClientLeads
+                .filter(l => {
+                  if (!revenueSearch) return true;
+                  const q = revenueSearch.toLowerCase();
+                  return l.name.toLowerCase().includes(q) ||
+                    (l.location ?? "").toLowerCase().includes(q) ||
+                    (l.status ?? "").toLowerCase().includes(q) ||
+                    (l.country ?? "").toLowerCase().includes(q) ||
+                    (l.state ?? "").toLowerCase().includes(q);
+                })
+                .map(lead => {
+                  const hasRevenue = revenueEdits[lead.id] && Number(revenueEdits[lead.id]) > 0;
+                  const statusColors: Record<string, { bg: string; text: string }> = {
+                    new: { bg: "#EEF2FF", text: "#4338CA" }, contacted: { bg: "#FFFBEB", text: "#B45309" },
+                    qualified: { bg: "#FFF7ED", text: "#C2410C" }, proposal: { bg: "#F5F3FF", text: "#6D28D9" },
+                    negotiation: { bg: "#FEF3C7", text: "#92400E" }, won: { bg: "#DCFCE7", text: "#15803D" },
+                    lost: { bg: "#FEE2E2", text: "#B91C1C" },
+                  };
+                  const sc = statusColors[lead.status] ?? { bg: "#F5F4F0", text: "#78716C" };
+                  return (
+                    <div key={lead.id}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 24px", borderBottom: "1px solid #FAFAF9", background: hasRevenue ? "#F0FDF4" : "transparent", transition: "background 0.1s" }}>
+                      {/* Lead info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#1C1917", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lead.name}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 8, background: sc.bg, color: sc.text, flexShrink: 0 }}>
+                            {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                          </span>
+                          {hasRevenue && <span style={{ fontSize: 10, fontWeight: 700, background: "#DCFCE7", color: "#15803D", padding: "1px 6px", borderRadius: 6, flexShrink: 0 }}>✓</span>}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "#A8A29E", display: "flex", gap: 8 }}>
+                          {lead.country && <span>{lead.country}</span>}
+                          {lead.state && <span>{lead.state}</span>}
+                          {lead.location && <span>{lead.location}</span>}
+                          {lead.expected_revenue && <span style={{ color: "#D97706" }}>Expected: ₹{lead.expected_revenue.toLocaleString("en-IN")}</span>}
+                          {lead.cycle_label && <span>· {lead.cycle_label}</span>}
+                        </div>
+                      </div>
+                      {/* Revenue input */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                        <span style={{ fontSize: 12, color: "#78716C", fontWeight: 500 }}>₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={revenueEdits[lead.id] ?? ""}
+                          placeholder="0"
+                          onChange={e => setRevenueEdits(prev => ({ ...prev, [lead.id]: e.target.value }))}
+                          style={{ width: 120, padding: "7px 10px", border: hasRevenue ? "1.5px solid #16A34A" : "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", background: hasRevenue ? "#F0FDF4" : "#fff", fontWeight: hasRevenue ? 600 : 400, color: "#1C1917", textAlign: "right" }}
+                        />
+                        {hasRevenue && (
+                          <button onClick={() => setRevenueEdits(prev => { const n = { ...prev }; delete n[lead.id]; return n; })}
+                            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 3, borderRadius: 5, display: "flex", color: "#A8A29E" }}>
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              {allClientLeads.filter(l => {
+                if (!revenueSearch) return true;
+                const q = revenueSearch.toLowerCase();
+                return l.name.toLowerCase().includes(q) || (l.location ?? "").toLowerCase().includes(q) || (l.status ?? "").toLowerCase().includes(q);
+              }).length === 0 && (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#A8A29E", fontSize: 13 }}>No leads match your search</div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: "14px 24px", borderTop: "1px solid #F0EEEC", display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+              <div style={{ fontSize: 12.5, color: "#78716C" }}>
+                Total revenue: <strong style={{ color: "#16A34A", fontSize: 14 }}>₹{Object.values(revenueEdits).reduce((s, v) => s + (Number(v) || 0), 0).toLocaleString("en-IN")}</strong>
+                <span style={{ fontSize: 11, color: "#A8A29E", marginLeft: 10 }}>will update period & all dashboards</span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setShowRevenueModal(false)}
+                  style={{ padding: "8px 18px", border: "1px solid #E7E5E4", borderRadius: 8, background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", color: "#78716C" }}>
+                  Cancel
+                </button>
+                <button onClick={saveRevenueToLeads} disabled={savingRevenue}
+                  style={{ padding: "8px 22px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: savingRevenue ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: savingRevenue ? 0.7 : 1 }}>
+                  {savingRevenue ? "Saving..." : "💾 Save Revenue"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
   );
 }
 
@@ -1613,7 +1864,9 @@ function LeadsSection({
 }: LeadsSectionProps) {
   const leadFormFields: [string, keyof LeadForm, string, string][] = [
     ["Lead Name *", "name", "text", ""],
-    ["Location", "location", "text", ""],
+    ["Country", "country", "text", "e.g. India"],
+    ["State", "state", "text", "e.g. Maharashtra"],
+    ["City / Location", "location", "text", ""],
     ["Expected Volume", "expected_volume", "number", ""],
     ["Expected Revenue (₹)", "expected_revenue", "number", ""],
     ["Cycle Label", "cycle_label", "text", "e.g. Q1 2025"],
