@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, TrendingUp, Activity, LogOut, ChevronRight } from "lucide-react";
+import { LayoutDashboard, TrendingUp, Activity, LogOut, ChevronRight, Clock } from "lucide-react";
 import clsx from "clsx";
 
 const nav = [
-  { label: "Dashboard", href: "/portal/dashboard", icon: LayoutDashboard },
-  { label: "Leads", href: "/portal/leads", icon: TrendingUp },
-  { label: "Working Status", href: "/portal/status", icon: Activity },
+  { label: "Dashboard",    href: "/portal/dashboard",  icon: LayoutDashboard },
+  { label: "Leads",        href: "/portal/leads",       icon: TrendingUp },
+  { label: "Lead Aging",   href: "/portal/lead-aging",  icon: Clock },
+  { label: "Working Status", href: "/portal/status",   icon: Activity },
 ];
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -27,7 +28,6 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       const { data: profile } = await supabase.from("profiles").select("*,clients(*)").eq("id", user.id).single();
       if (profile?.clients) {
         setClient(profile.clients);
-        // Apply per-client CSS vars
         const c = profile.clients;
         document.documentElement.style.setProperty("--portal-primary", c.primary_color);
         document.documentElement.style.setProperty("--portal-accent", c.accent_color);
@@ -44,15 +44,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   }
 
   const primary = client?.primary_color ?? "#2C1A0F";
-  const accent = client?.accent_color ?? "#A86035";
-  const gold = "#D4A843";
+  const accent  = client?.accent_color  ?? "#A86035";
 
   return (
     <div className="flex min-h-screen" style={{ background: "#F8F6F2" }}>
-      {/* Sidebar */}
       <aside className="fixed left-0 top-0 h-screen w-60 flex flex-col z-30"
         style={{ background: primary, borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-        {/* Brand */}
         <div className="px-6 py-6 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
           {client?.logo_url ? (
             <img src={client.logo_url} alt={client.name} className="h-8 object-contain mb-1" />
@@ -78,8 +75,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 className={clsx("flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all")}
                 style={active
                   ? { background: `${accent}22`, color: accent, borderLeft: `3px solid ${accent}`, paddingLeft: "13px" }
-                  : { color: "rgba(250,244,232,0.7)" }
-                }>
+                  : { color: "rgba(250,244,232,0.7)" }}>
                 <Icon size={16} />
                 <span>{label}</span>
                 {active && <ChevronRight size={14} className="ml-auto opacity-60" />}

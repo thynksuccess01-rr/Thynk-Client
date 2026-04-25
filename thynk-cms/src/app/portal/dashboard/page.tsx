@@ -1,17 +1,23 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  LineChart, Line, PieChart, Pie, Cell, Legend,
-  BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  LineChart, Line, PieChart, Pie, Cell,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  BarChart, Bar, Legend,
+  ComposedChart,
 } from "recharts";
 
 const TIMELINES = [
-  { label: "Today", days: 1 }, { label: "Last 5 Days", days: 5 },
-  { label: "Last 15 Days", days: 15 }, { label: "Last 30 Days", days: 30 },
-  { label: "Last 90 Days", days: 90 }, { label: "Last 180 Days", days: 180 },
+  { label: "Today", days: 1 },
+  { label: "Last 5 Days", days: 5 },
+  { label: "Last 15 Days", days: 15 },
+  { label: "Last 30 Days", days: 30 },
+  { label: "Last 90 Days", days: 90 },
+  { label: "Last 180 Days", days: 180 },
   { label: "Current Year", days: 365 },
 ];
 const TABS = ["Summary", "Campaigns", "Leads", "Revenue", "Reports"];
@@ -19,9 +25,10 @@ const TABS = ["Summary", "Campaigns", "Leads", "Revenue", "Reports"];
 const fmt = (n: number) =>
   n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n ?? 0);
 const fmtINR = (n: number) =>
-  `\u20b9${n >= 100000 ? `${(n / 100000).toFixed(1)}L` : n >= 1000 ? `${(n / 1000).toFixed(0)}K` : (n ?? 0)}`;
+  `${n >= 100000 ? `${(n / 100000).toFixed(1)}L` : n >= 1000 ? `${(n / 1000).toFixed(0)}K` : (n ?? 0)}`;
 const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
-const CHART_COLORS = { email: "#3B82F6", wa: "#10B981", calls: "#E8611A" };
+
+const CHART_COLORS = { email: "#3B82F6", wa: "#10B981", calls: "#E8611A", revenue: "#F59E0B", won: "#16A34A", lost: "#EF4444" };
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -30,46 +37,34 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       <p style={{ color: "#A8A29E", fontSize: 11, marginBottom: 6 }}>{label}</p>
       {payload.map((p: any) => (
         <p key={p.dataKey} style={{ color: p.color, fontSize: 12.5, fontWeight: 600 }}>
-          {p.name}: {typeof p.value === "number" && p.name === "Revenue" ? fmtINR(p.value) : fmt(p.value)}
+          {p.name}: {typeof p.value === "number" && p.name === "Revenue" ? `${fmtINR(p.value)}` : fmt(p.value)}
         </p>
       ))}
     </div>
   );
 };
+
 const ChartLegend = ({ items }: { items: [string, string][] }) => (
   <div style={{ display: "flex", gap: 14 }}>
     {items.map(([label, color]) => (
       <span key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#78716C" }}>
-        <span style={{ width: 18, height: 2.5, borderRadius: 2, background: color, display: "inline-block" }} />{label}
+        <span style={{ width: 18, height: 2.5, borderRadius: 2, background: color, display: "inline-block" }} />
+        {label}
       </span>
     ))}
   </div>
 );
-const RateGauge = ({ label, value, color }: { label: string; value: number; color: string }) => (
-  <div style={{ textAlign: "center" }}>
-    <div style={{ position: "relative", width: 64, height: 64, margin: "0 auto 6px" }}>
-      <svg viewBox="0 0 64 64" style={{ transform: "rotate(-90deg)" }}>
-        <circle cx="32" cy="32" r="26" fill="none" stroke="#F0EEEC" strokeWidth="7" />
-        <circle cx="32" cy="32" r="26" fill="none" stroke={color} strokeWidth="7"
-          strokeDasharray={`${(value / 100) * 163.4} 163.4`} strokeLinecap="round" />
-      </svg>
-      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color }}>{value}%</span>
-    </div>
-    <p style={{ fontSize: 11, color: "#78716C", fontWeight: 500 }}>{label}</p>
-  </div>
-);
 
 export default function PortalDashboard() {
-  const [client, setClient] = useState<any>(null);
-  const [products, setProducts] = useState<any[]>([]);
-  const [selProduct, setSelProduct] = useState("all");
+  const [clientData, setClientData] = useState<any>(null);
+  const [clientId, setClientId] = useState<string|null>(null);
   const [timeline, setTimeline] = useState(30);
   const [tab, setTab] = useState("Summary");
   const [campChan, setCampChan] = useState("Email Campaign");
+  const [reportTab, setReportTab] = useState("Leads");
   const [entries, setEntries] = useState<any[]>([]);
   const [updates, setUpdates] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
-  const [clientId, setClientId] = useState<string | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -78,9 +73,8 @@ export default function PortalDashboard() {
       if (!user) return;
       const { data: p } = await supabase.from("profiles").select("client_id,clients(*)").eq("id", user.id).single();
       if (!p?.client_id) return;
-      setClientId(p.client_id); setClient(p.clients);
-      const { data: mp } = await supabase.from("client_products").select("products(id,name)").eq("client_id", p.client_id);
-      setProducts((mp ?? []).map((m: any) => m.products).filter(Boolean));
+      setClientId(p.client_id);
+      setClientData(p.clients);
     }
     init();
   }, []);
@@ -99,9 +93,6 @@ export default function PortalDashboard() {
 
   useEffect(() => { if (clientId) load(); }, [load]);
 
-  const accent = client?.accent_color ?? "#E8611A";
-  const primary = client?.primary_color ?? "#1C1917";
-
   const emailUpds = updates.filter((u) => u.channel === "email");
   const waUpds = updates.filter((u) => u.channel === "whatsapp");
   const callUpds = updates.filter((u) => u.channel === "calls");
@@ -119,19 +110,20 @@ export default function PortalDashboard() {
   const expectedRev = entries.reduce((s, e) => s + (e.expected_collection ?? 0), 0);
   const totalLic = entries.reduce((s, e) => s + (e.total_licences ?? 0), 0);
   const wonLeads = leads.filter((l) => l.status === "won").length;
-  // Revenue actually collected across leads (lead-level, more granular than period entry)
-  const totalLeadRevCollected = leads.reduce((s, l) => s + (l.revenue_collected ?? 0), 0);
   const activeLeads = leads.filter((l) => !["won", "lost"].includes(l.status)).length;
   const lostLeads = leads.filter((l) => l.status === "lost").length;
   const updatedLeads = leads.filter((l) => l.is_updated_this_cycle).length;
 
   const periodChartData = entries.slice(-10).map((e) => {
     const pu = updates.filter((u) => u.update_date >= e.period_start && u.update_date <= e.period_end);
+    const eu = pu.filter((u) => u.channel === "email");
+    const wu = pu.filter((u) => u.channel === "whatsapp");
+    const cu = pu.filter((u) => u.channel === "calls");
     return {
       name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
-      Email: e.email_sent + pu.filter((u:any)=>u.channel==="email").reduce((s:number,u:any)=>s+u.email_sent,0),
-      WA: e.whatsapp_sent + pu.filter((u:any)=>u.channel==="whatsapp").reduce((s:number,u:any)=>s+u.whatsapp_sent,0),
-      Calls: e.calls_made + pu.filter((u:any)=>u.channel==="calls").reduce((s:number,u:any)=>s+u.calls_made,0),
+      Email: e.email_sent + eu.reduce((s: number, u: any) => s + u.email_sent, 0),
+      WA: e.whatsapp_sent + wu.reduce((s: number, u: any) => s + u.whatsapp_sent, 0),
+      Calls: e.calls_made + cu.reduce((s: number, u: any) => s + u.calls_made, 0),
       Revenue: e.total_revenue_collected ?? 0,
       Licences: e.total_licences ?? 0,
     };
@@ -156,6 +148,8 @@ export default function PortalDashboard() {
     { metric: "Conversion", value: rate(callsConverted, callsMade), fullMark: 100 },
   ];
 
+  const clientRevData: any[] = [];
+
   const Card = ({ icon, label, value, sub, color }: any) => (
     <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: "16px 14px", display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
       <div style={{ fontSize: 22 }}>{icon}</div>
@@ -165,60 +159,55 @@ export default function PortalDashboard() {
     </div>
   );
 
+  const RateGauge = ({ label, value, color }: any) => (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ position: "relative", width: 64, height: 64, margin: "0 auto 6px" }}>
+        <svg viewBox="0 0 64 64" style={{ transform: "rotate(-90deg)" }}>
+          <circle cx="32" cy="32" r="26" fill="none" stroke="#F0EEEC" strokeWidth="7" />
+          <circle cx="32" cy="32" r="26" fill="none" stroke={color} strokeWidth="7" strokeDasharray={`${(value / 100) * 163.4} 163.4`} strokeLinecap="round" />
+        </svg>
+        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color }}>{value}%</span>
+      </div>
+      <p style={{ fontSize: 11, color: "#78716C", fontWeight: 500 }}>{label}</p>
+    </div>
+  );
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#1C1917" }}>
-            {client?.name ?? ""} <span style={{ color: accent }}>Dashboard</span>
-          </h1>
-          <p style={{ fontSize: 13, color: "#78716C", marginTop: 2 }}>
-            {entries.length} periods \u00b7 {leads.length} leads \u00b7 {fmtINR(totalRev)} collected
-            {updatedLeads > 0 && <span style={{ marginLeft: 8, fontSize: 11, background: "#FEF3C7", color: "#92400E", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>{updatedLeads} LEADS UPDATED</span>}
-          </p>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#1C1917" }}>{clientData?.name ?? ""} <span style={{ color: clientData?.accent_color ?? "#E8611A" }}>Dashboard</span></h1>
+          <p style={{ fontSize: 13, color: "#78716C", marginTop: 2 }}>{entries.length} periods · {leads.length} leads · {updatedLeads > 0 && <span style={{ marginLeft: 4, fontSize: 11, background: "#FEF3C7", color: "#92400E", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>{updatedLeads} UPDATED</span>}</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {products.length > 1 && (
-            <div style={{ position: "relative" }}>
-              <select value={selProduct} onChange={(e) => setSelProduct(e.target.value)}
-                style={{ appearance: "none", padding: "8px 32px 8px 12px", background: "#fff", border: "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, color: "#1C1917", cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>
-                <option value="all">All Products</option>
-                {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <ChevronDown size={13} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#78716C" }} />
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 4, background: "#fff", border: "1px solid #E7E5E4", borderRadius: 8, padding: 3 }}>
-            {TIMELINES.map((t) => (
-              <button key={t.days} onClick={() => setTimeline(t.days)}
-                style={{ padding: "5px 10px", fontSize: 11.5, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, borderRadius: 6, background: timeline === t.days ? primary : "transparent", color: timeline === t.days ? "#fff" : "#78716C", transition: "all 0.15s", whiteSpace: "nowrap" }}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+        <div style={{ display: "flex", gap: 4, background: "#fff", border: "1px solid #E7E5E4", borderRadius: 8, padding: 3 }}>
+          {TIMELINES.map((t) => (
+            <button key={t.days} onClick={() => setTimeline(t.days)} style={{ padding: "5px 10px", fontSize: 11.5, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, borderRadius: 6, background: timeline === t.days ? "#1C1917" : "transparent", color: timeline === t.days ? "#fff" : "#78716C", transition: "all 0.15s", whiteSpace: "nowrap" }}>
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #E7E5E4", marginBottom: 20 }}>
         {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ padding: "10px 20px", fontSize: 13.5, fontWeight: 600, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: tab === t ? accent : "#78716C", borderBottom: tab === t ? `2px solid ${accent}` : "2px solid transparent", marginBottom: -2, transition: "all 0.15s" }}>
+          <button key={t} onClick={() => setTab(t)} style={{ padding: "10px 20px", fontSize: 13.5, fontWeight: 600, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: tab === t ? "#E8611A" : "#78716C", borderBottom: tab === t ? "2px solid #E8611A" : "2px solid transparent", marginBottom: -2, transition: "all 0.15s" }}>
             {t}
           </button>
         ))}
       </div>
 
+      {/* ═══ SUMMARY ═══ */}
       {tab === "Summary" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(8,1fr)", gap: 10, marginBottom: 20 }}>
-            <Card icon="\ud83d\udce7" label="Emails Sent" value={fmt(emailSent)} sub={`${rate(emailOpened, emailSent)}% opened`} color="#2563EB" />
-            <Card icon="\ud83d\udc41\ufe0f" label="Opened" value={fmt(emailOpened)} sub={`${rate(emailClicked, emailOpened)}% clicked`} color="#6366F1" />
-            <Card icon="\ud83d\udcac" label="WhatsApp" value={fmt(waSent)} sub={`${rate(waDelivered, waSent)}% delivered`} color="#16A34A" />
-            <Card icon="\u21a9\ufe0f" label="WA Replied" value={fmt(waReplied)} sub={`${rate(waReplied, waSent)}% rate`} color="#0891B2" />
-            <Card icon="\ud83d\udcde" label="Calls" value={fmt(callsMade)} sub={`${rate(callsConnected, callsMade)}% connected`} color="#7C3AED" />
-            <Card icon="\ud83c\udfaf" label="Total Leads" value={leads.length} sub={`${wonLeads} won`} color={accent} />
-            <Card icon="\u20b9" label="Collected" value={fmtINR(totalRev)} sub={`${fmtINR(expectedRev)} expected`} color="#D97706" />
-            <Card icon="\ud83d\udce6" label="Licences" value={fmt(totalLic)} sub="units sold" color="#BE185D" />
+            <Card icon="📅" label="Periods" value={entries.length} sub={`${leads.length} leads`} color="#6366F1" />
+            <Card icon="📧" label="Emails Sent" value={fmt(emailSent)} sub={`${rate(emailOpened, emailSent)}% opened`} color="#2563EB" />
+            <Card icon="💬" label="WhatsApp" value={fmt(waSent)} sub={`${rate(waDelivered, waSent)}% delivered`} color="#16A34A" />
+            <Card icon="📞" label="Calls" value={fmt(callsMade)} sub={`${rate(callsConnected, callsMade)}% connected`} color="#7C3AED" />
+            <Card icon="🎯" label="Total Leads" value={leads.length} sub={`${wonLeads} won`} color="#E8611A" />
+            <Card icon="₹" label="Collected" value={`₹${fmtINR(totalRev)}`} sub={`₹${fmtINR(expectedRev)} expected`} color="#D97706" />
+            <Card icon="📦" label="Licences" value={fmt(totalLic)} sub="units sold" color="#0891B2" />
+            <Card icon="🔮" label="Pipeline" value={`₹${fmtINR(expectedRev)}`} sub="expected value" color="#BE185D" />
           </div>
 
           <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: "18px 24px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
@@ -232,16 +221,17 @@ export default function PortalDashboard() {
               <RateGauge label="WA Delivery" value={rate(waDelivered, waSent)} color="#10B981" />
               <RateGauge label="WA Reply" value={rate(waReplied, waSent)} color="#0891B2" />
               <RateGauge label="Call Connect" value={rate(callsConnected, callsMade)} color="#7C3AED" />
-              <RateGauge label="Converted" value={rate(callsConverted, callsMade)} color={accent} />
+              <RateGauge label="Converted" value={rate(callsConverted, callsMade)} color="#E8611A" />
               <RateGauge label="Lead Win" value={rate(wonLeads, leads.length)} color="#16A34A" />
             </div>
           </div>
 
+          {/* ── LINE CHART: Campaign Activity ── */}
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, marginBottom: 16 }}>
             <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>\ud83d\udcca Campaign Activity by Period</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>📊 Campaign Activity by Period</p>
                   <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>Email, WhatsApp & Calls volume</p>
                 </div>
                 <ChartLegend items={[["Email", CHART_COLORS.email], ["WA", CHART_COLORS.wa], ["Calls", CHART_COLORS.calls]]} />
@@ -262,8 +252,9 @@ export default function PortalDashboard() {
                 </ResponsiveContainer>
               )}
             </div>
+
             <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 4 }}>\ud83c\udfaf Lead Status Distribution</p>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 4 }}>🎯 Lead Status Distribution</p>
               <p style={{ fontSize: 11.5, color: "#A8A29E", marginBottom: 14 }}>{leads.length} total leads</p>
               {leadStatusData.length === 0 ? (
                 <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No leads</div>
@@ -291,14 +282,15 @@ export default function PortalDashboard() {
             </div>
           </div>
 
+          {/* ── LINE CHART: Revenue & Licences ── */}
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, marginBottom: 16 }}>
             <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>\ud83d\udcb0 Revenue & Licences by Period</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>💰 Revenue & Licences by Period</p>
                   <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>Collected revenue and licence count</p>
                 </div>
-                <ChartLegend items={[["Revenue", accent], ["Licences", "#0891B2"]]} />
+                <ChartLegend items={[["Revenue", "#E8611A"], ["Licences", "#0891B2"]]} />
               </div>
               {periodChartData.length === 0 ? (
                 <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data</div>
@@ -307,23 +299,24 @@ export default function PortalDashboard() {
                   <LineChart data={periodChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 10.5, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="rev" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => fmtINR(v)} />
+                    <YAxis yAxisId="rev" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => `₹${fmtINR(v)}`} />
                     <YAxis yAxisId="lic" orientation="right" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={30} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Line yAxisId="rev" type="monotone" dataKey="Revenue" stroke={accent} strokeWidth={2.5} dot={{ r: 4, fill: accent, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }} name="Revenue" />
+                    <Line yAxisId="rev" type="monotone" dataKey="Revenue" stroke="#E8611A" strokeWidth={2.5} dot={{ r: 4, fill: "#E8611A", strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }} name="Revenue" />
                     <Line yAxisId="lic" type="monotone" dataKey="Licences" stroke="#0891B2" strokeWidth={2.5} strokeDasharray="5 3" dot={{ r: 4, fill: "#0891B2", strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }} name="Licences" />
                   </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
+
             <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 4 }}>\ud83d\udce1 Channel Performance</p>
-              <p style={{ fontSize: 11.5, color: "#A8A29E", marginBottom: 10 }}>Rate metrics (0\u201390%)</p>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 4 }}>📡 Channel Performance Radar</p>
+              <p style={{ fontSize: 11.5, color: "#A8A29E", marginBottom: 10 }}>Rate metrics (0–100%)</p>
               <ResponsiveContainer width="100%" height={190}>
                 <RadarChart data={rateRadarData} margin={{ top: 0, right: 10, left: 10, bottom: 0 }}>
                   <PolarGrid stroke="#F0EEEC" />
                   <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10, fill: "#78716C" }} />
-                  <Radar name="Rate" dataKey="value" stroke={accent} fill={accent} fillOpacity={0.2} strokeWidth={2} />
+                  <Radar name="Rate" dataKey="value" stroke="#E8611A" fill="#E8611A" fillOpacity={0.2} strokeWidth={2} />
                   <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} formatter={(v: any) => `${v}%`} />
                 </RadarChart>
               </ResponsiveContainer>
@@ -331,15 +324,16 @@ export default function PortalDashboard() {
           </div>
 
           <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#A8A29E", letterSpacing: "0.08em", marginBottom: 16 }}>CAMPAIGN \u2192 CONVERSION FUNNEL</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#A8A29E", letterSpacing: "0.08em", marginBottom: 16 }}>CAMPAIGN → CONVERSION FUNNEL</p>
             <div style={{ display: "flex", alignItems: "stretch", gap: 0 }}>
               {[
-                { icon: "\ud83d\udce7", label: "Emails Sent", value: emailSent, r: null, color: "#6366F1", bg: "#EEF2FF" },
-                { icon: "\ud83d\udc41\ufe0f", label: "Opened", value: emailOpened, r: rate(emailOpened, emailSent), color: "#2563EB", bg: "#EFF6FF" },
-                { icon: "\ud83d\udcac", label: "WA Delivered", value: waDelivered, r: rate(waDelivered, waSent), color: "#10B981", bg: "#ECFDF5" },
-                { icon: "\u21a9\ufe0f", label: "WA Replied", value: waReplied, r: rate(waReplied, waSent), color: "#16A34A", bg: "#F0FDF4" },
-                { icon: "\ud83d\udcde", label: "Connected", value: callsConnected, r: rate(callsConnected, callsMade), color: "#3B82F6", bg: "#EFF6FF" },
-                { icon: "\ud83c\udfc6", label: "Won Leads", value: wonLeads, r: rate(wonLeads, leads.length), color: "#16A34A", bg: "#DCFCE7" },
+                { icon: "📧", label: "Emails Sent", value: emailSent, r: null, color: "#6366F1", bg: "#EEF2FF" },
+                { icon: "👁️", label: "Opened", value: emailOpened, r: rate(emailOpened, emailSent), color: "#2563EB", bg: "#EFF6FF" },
+                { icon: "🖱️", label: "Clicked", value: emailClicked, r: rate(emailClicked, emailSent), color: "#0891B2", bg: "#ECFEFF" },
+                { icon: "💬", label: "WA Delivered", value: waDelivered, r: rate(waDelivered, waSent), color: "#10B981", bg: "#ECFDF5" },
+                { icon: "↩️", label: "WA Replied", value: waReplied, r: rate(waReplied, waSent), color: "#16A34A", bg: "#F0FDF4" },
+                { icon: "📞", label: "Connected", value: callsConnected, r: rate(callsConnected, callsMade), color: "#3B82F6", bg: "#EFF6FF" },
+                { icon: "🏆", label: "Won Leads", value: wonLeads, r: rate(wonLeads, leads.length), color: "#16A34A", bg: "#DCFCE7" },
               ].map(({ icon, label, value, r, color, bg }, i, arr) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", flex: 1, gap: 0 }}>
                   <div style={{ flex: 1, background: bg, border: `1px solid ${color}20`, borderRadius: 10, padding: "14px 10px", textAlign: "center", minWidth: 0 }}>
@@ -348,7 +342,7 @@ export default function PortalDashboard() {
                     <p style={{ fontSize: 11, fontWeight: 600, color: "#1C1917", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</p>
                     {r !== null && <p style={{ fontSize: 10.5, color: "#78716C", marginTop: 2 }}>{r}% rate</p>}
                   </div>
-                  {i < arr.length - 1 && <span style={{ fontSize: 14, color: "#D6D3D1", flexShrink: 0, padding: "0 4px" }}>\u2192</span>}
+                  {i < arr.length - 1 && <span style={{ fontSize: 14, color: "#D6D3D1", flexShrink: 0, padding: "0 4px" }}>→</span>}
                 </div>
               ))}
             </div>
@@ -356,15 +350,15 @@ export default function PortalDashboard() {
 
           <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>
-                \ud83d\udccb Recent Leads
-                {updatedLeads > 0 && <span style={{ fontSize: 11, background: "#FEF3C7", color: "#92400E", padding: "2px 8px", borderRadius: 8, fontWeight: 600, marginLeft: 8 }}>{updatedLeads} UPDATED</span>}
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", display: "flex", alignItems: "center", gap: 6 }}>
+                📋 Recent Leads{updatedLeads > 0 && <span style={{ fontSize: 11, background: "#FEF3C7", color: "#92400E", padding: "2px 8px", borderRadius: 8, fontWeight: 600, marginLeft: 4 }}>{updatedLeads} UPDATED</span>}
               </p>
+              <Link href="/portal/leads" style={{ fontSize: 12.5, color: "#E8611A", textDecoration: "none", fontWeight: 600 }}>View All →</Link>
             </div>
             {leads.length === 0 ? <p style={{ fontSize: 13, color: "#A8A29E", textAlign: "center", padding: "24px 0" }}>No leads yet</p> : (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead><tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
-                  {["Lead", "Period", "Status", "Location", "Revenue", "Cycle", "Change"].map((h) => (
+                  {["Lead", "Period Generated", "Status", "Location", "Revenue", "Cycle", "Change"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11.5, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
                   ))}
                 </tr></thead>
@@ -374,27 +368,31 @@ export default function PortalDashboard() {
                     return (
                       <tr key={l.id} style={{ borderBottom: "1px solid #FAFAF9", background: l.is_updated_this_cycle ? "#FFFBEB" : "transparent" }}>
                         <td style={{ padding: "10px 12px", fontWeight: 600, color: "#1C1917" }}>
-                          {l.name}{l.is_updated_this_cycle && <span style={{ marginLeft: 5, fontSize: 10, background: "#FEF3C7", color: "#92400E", padding: "1px 6px", borderRadius: 8, fontWeight: 700 }}>\u2191</span>}
+                          {l.name}{l.is_updated_this_cycle && <span style={{ marginLeft: 5, fontSize: 10, background: "#FEF3C7", color: "#92400E", padding: "1px 6px", borderRadius: 8, fontWeight: 700 }}>↑</span>}
                         </td>
                         <td style={{ padding: "10px 12px", fontSize: 12 }}>
-                          {entry ? <span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 7px", borderRadius: 6, fontSize: 11.5, fontWeight: 500 }}>{entry.entry_label || new Date(entry.period_start).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span> : <span style={{ color: "#D6D3D1" }}>\u2014</span>}
+                          {entry ? (
+                            <span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 7px", borderRadius: 6, fontSize: 11.5, fontWeight: 500 }}>
+                              {entry.entry_label || `${new Date(entry.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}–${new Date(entry.period_end).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "2-digit" })}`}
+                            </span>
+                          ) : <span style={{ color: "#D6D3D1" }}>—</span>}
                         </td>
                         <td style={{ padding: "10px 12px" }}>
                           <span style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 10, fontWeight: 600, background: l.status === "won" ? "#DCFCE7" : l.status === "lost" ? "#FEE2E2" : "#EEF2FF", color: l.status === "won" ? "#15803D" : l.status === "lost" ? "#B91C1C" : "#4338CA" }}>
                             {l.status.charAt(0).toUpperCase() + l.status.slice(1)}
                           </span>
                         </td>
-                        <td style={{ padding: "10px 12px", color: "#78716C", fontSize: 12.5 }}>{l.location ?? "\u2014"}</td>
-                        <td style={{ padding: "10px 12px", fontWeight: 600, color: "#16A34A" }}>{l.expected_revenue ? fmtINR(l.expected_revenue) : "\u2014"}</td>
-                        <td style={{ padding: "10px 12px", color: "#A8A29E", fontSize: 12 }}>{l.cycle_label ?? "\u2014"}</td>
+                        <td style={{ padding: "10px 12px", color: "#78716C", fontSize: 12.5 }}>{l.location ?? "—"}</td>
+                        <td style={{ padding: "10px 12px", fontWeight: 600, color: "#16A34A" }}>{l.expected_revenue ? `₹${fmtINR(l.expected_revenue)}` : "—"}</td>
+                        <td style={{ padding: "10px 12px", color: "#A8A29E", fontSize: 12 }}>{l.cycle_label ?? "—"}</td>
                         <td style={{ padding: "10px 12px", fontSize: 12 }}>
                           {l.previous_status && l.previous_status !== l.status ? (
                             <span>
                               <span style={{ background: "#FEE2E2", color: "#B91C1C", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>{l.previous_status}</span>
-                              {" \u2192 "}
+                              {" → "}
                               <span style={{ background: "#DCFCE7", color: "#15803D", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>{l.status}</span>
                             </span>
-                          ) : <span style={{ color: "#D6D3D1" }}>\u2014</span>}
+                          ) : <span style={{ color: "#D6D3D1" }}>—</span>}
                         </td>
                       </tr>
                     );
@@ -406,56 +404,145 @@ export default function PortalDashboard() {
         </>
       )}
 
+      {/* ═══ CAMPAIGNS ═══ */}
       {tab === "Campaigns" && (() => {
         const CAMP_CHANNELS = ["Email Campaign", "WhatsApp Campaign", "Calls"];
-        const emailPD = entries.map((e) => { const eu = updates.filter((u) => u.channel === "email" && u.update_date >= e.period_start && u.update_date <= e.period_end); return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: e.email_sent + eu.reduce((s: number, u: any) => s + u.email_sent, 0), Opened: e.email_opened + eu.reduce((s: number, u: any) => s + u.email_opened, 0), Clicked: e.email_clicked + eu.reduce((s: number, u: any) => s + u.email_clicked, 0) }; });
-        const waPD = entries.map((e) => { const wu = updates.filter((u) => u.channel === "whatsapp" && u.update_date >= e.period_start && u.update_date <= e.period_end); return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: e.whatsapp_sent + wu.reduce((s: number, u: any) => s + u.whatsapp_sent, 0), Delivered: e.whatsapp_delivered + wu.reduce((s: number, u: any) => s + u.whatsapp_delivered, 0), Replied: e.whatsapp_replied + wu.reduce((s: number, u: any) => s + u.whatsapp_replied, 0) }; });
-        const callsPD = entries.map((e) => { const cu = updates.filter((u) => u.channel === "calls" && u.update_date >= e.period_start && u.update_date <= e.period_end); return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Made: e.calls_made + cu.reduce((s: number, u: any) => s + u.calls_made, 0), Connected: e.calls_connected + cu.reduce((s: number, u: any) => s + u.calls_connected, 0), Converted: e.calls_converted + cu.reduce((s: number, u: any) => s + u.calls_converted, 0) }; });
-        const CC: Record<string, any> = {
-          "Email Campaign": { icon: "\ud83d\udce7", color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", stats: [["Sent", emailSent], ["Opened", emailOpened], ["Clicked", emailClicked], ["Open Rate", `${rate(emailOpened, emailSent)}%`], ["Click Rate", `${rate(emailClicked, emailSent)}%`]], rateA: rate(emailOpened, emailSent), rateB: rate(emailClicked, emailSent), pd: emailPD, lines: [["Sent", "#6366F1"], ["Opened", "#2563EB"], ["Clicked", "#0891B2"]] },
-          "WhatsApp Campaign": { icon: "\ud83d\udcac", color: "#16A34A", bg: "#F0FDF4", border: "#A7F3D0", stats: [["Sent", waSent], ["Delivered", waDelivered], ["Replied", waReplied], ["Delivery Rate", `${rate(waDelivered, waSent)}%`], ["Reply Rate", `${rate(waReplied, waSent)}%`]], rateA: rate(waDelivered, waSent), rateB: rate(waReplied, waSent), pd: waPD, lines: [["Sent", "#6EE7B7"], ["Delivered", "#10B981"], ["Replied", "#059669"]] },
-          "Calls": { icon: "\ud83d\udcde", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE", stats: [["Made", callsMade], ["Connected", callsConnected], ["Converted", callsConverted], ["Connect Rate", `${rate(callsConnected, callsMade)}%`], ["Conversion", `${rate(callsConverted, callsMade)}%`]], rateA: rate(callsConnected, callsMade), rateB: rate(callsConverted, callsMade), pd: callsPD, lines: [["Made", "#C4B5FD"], ["Connected", "#8B5CF6"], ["Converted", "#6D28D9"]] },
+
+        // Period-level breakdown per channel
+        const emailPeriodData = entries.map((e) => {
+          const eu = updates.filter((u) => u.channel === "email" && u.update_date >= e.period_start && u.update_date <= e.period_end);
+          const sent = e.email_sent + eu.reduce((s: number, u: any) => s + u.email_sent, 0);
+          const opened = e.email_opened + eu.reduce((s: number, u: any) => s + u.email_opened, 0);
+          const clicked = e.email_clicked + eu.reduce((s: number, u: any) => s + u.email_clicked, 0);
+          return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: sent, Opened: opened, Clicked: clicked };
+        });
+        const waPeriodData = entries.map((e) => {
+          const wu = updates.filter((u) => u.channel === "whatsapp" && u.update_date >= e.period_start && u.update_date <= e.period_end);
+          const sent = e.whatsapp_sent + wu.reduce((s: number, u: any) => s + u.whatsapp_sent, 0);
+          const delivered = e.whatsapp_delivered + wu.reduce((s: number, u: any) => s + u.whatsapp_delivered, 0);
+          const replied = e.whatsapp_replied + wu.reduce((s: number, u: any) => s + u.whatsapp_replied, 0);
+          return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: sent, Delivered: delivered, Replied: replied };
+        });
+        const callsPeriodData = entries.map((e) => {
+          const cu = updates.filter((u) => u.channel === "calls" && u.update_date >= e.period_start && u.update_date <= e.period_end);
+          const made = e.calls_made + cu.reduce((s: number, u: any) => s + u.calls_made, 0);
+          const connected = e.calls_connected + cu.reduce((s: number, u: any) => s + u.calls_connected, 0);
+          const converted = e.calls_converted + cu.reduce((s: number, u: any) => s + u.calls_converted, 0);
+          return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Made: made, Connected: connected, Converted: converted };
+        });
+
+        const campConfig: Record<string, { icon: string; color: string; bg: string; border: string; stats: [string, number | string][]; rateA: number; rateB: number; periodData: any[]; lines: [string, string][] }> = {
+          "Email Campaign": { icon: "📧", color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", stats: [["Sent", emailSent], ["Opened", emailOpened], ["Clicked", emailClicked], ["Open Rate", `${rate(emailOpened, emailSent)}%`], ["Click Rate", `${rate(emailClicked, emailSent)}%`]], rateA: rate(emailOpened, emailSent), rateB: rate(emailClicked, emailSent), periodData: emailPeriodData, lines: [["Sent", "#6366F1"], ["Opened", "#2563EB"], ["Clicked", "#0891B2"]] },
+          "WhatsApp Campaign": { icon: "💬", color: "#16A34A", bg: "#F0FDF4", border: "#A7F3D0", stats: [["Sent", waSent], ["Delivered", waDelivered], ["Replied", waReplied], ["Delivery Rate", `${rate(waDelivered, waSent)}%`], ["Reply Rate", `${rate(waReplied, waSent)}%`]], rateA: rate(waDelivered, waSent), rateB: rate(waReplied, waSent), periodData: waPeriodData, lines: [["Sent", "#6EE7B7"], ["Delivered", "#10B981"], ["Replied", "#059669"]] },
+          "Calls": { icon: "📞", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE", stats: [["Made", callsMade], ["Connected", callsConnected], ["Converted", callsConverted], ["Connect Rate", `${rate(callsConnected, callsMade)}%`], ["Conversion", `${rate(callsConverted, callsMade)}%`]], rateA: rate(callsConnected, callsMade), rateB: rate(callsConverted, callsMade), periodData: callsPeriodData, lines: [["Made", "#C4B5FD"], ["Connected", "#8B5CF6"], ["Converted", "#6D28D9"]] },
         };
-        const cfg = CC[campChan];
+
+        const cfg = campConfig[campChan];
+
         return (
           <div>
+            {/* Channel sub-tabs */}
             <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-              {CAMP_CHANNELS.map((ch) => { const active = campChan === ch; return (<button key={ch} onClick={() => setCampChan(ch)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", borderRadius: 10, border: active ? `2px solid ${CC[ch].color}` : "2px solid #E7E5E4", background: active ? CC[ch].bg : "#fff", color: active ? CC[ch].color : "#78716C", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}><span style={{ fontSize: 17 }}>{CC[ch].icon}</span>{ch}</button>); })}
+              {CAMP_CHANNELS.map((ch) => {
+                const ico = campConfig[ch].icon;
+                const active = campChan === ch;
+                return (
+                  <button key={ch} onClick={() => setCampChan(ch)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", borderRadius: 10, border: active ? `2px solid ${campConfig[ch].color}` : "2px solid #E7E5E4", background: active ? campConfig[ch].bg : "#fff", color: active ? campConfig[ch].color : "#78716C", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}>
+                    <span style={{ fontSize: 17 }}>{ico}</span>{ch}
+                  </button>
+                );
+              })}
             </div>
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, marginBottom: 16 }}>
+              {/* Stats card */}
               <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ background: cfg.bg, padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${cfg.border}` }}><span style={{ fontSize: 24 }}>{cfg.icon}</span><p style={{ fontSize: 15, fontWeight: 700, color: cfg.color }}>{campChan}</p></div>
+                <div style={{ background: cfg.bg, padding: "16px 20px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${cfg.border}` }}>
+                  <span style={{ fontSize: 24 }}>{cfg.icon}</span>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: cfg.color }}>{campChan}</p>
+                </div>
                 <div style={{ padding: 20 }}>
-                  {cfg.stats.map(([l, v]: any) => (<div key={l} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F5F4F0" }}><span style={{ fontSize: 13, color: "#78716C" }}>{l}</span><span style={{ fontSize: 16, fontWeight: 800, color: cfg.color }}>{typeof v === "number" ? fmt(v) : v}</span></div>))}
-                  <div style={{ marginTop: 16, display: "flex", gap: 14, justifyContent: "center" }}><RateGauge label={cfg.stats[3][0]} value={cfg.rateA} color={cfg.color} /><RateGauge label={cfg.stats[4][0]} value={cfg.rateB} color={cfg.color} /></div>
+                  {cfg.stats.map(([l, v]) => (
+                    <div key={l as string} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F5F4F0" }}>
+                      <span style={{ fontSize: 13, color: "#78716C" }}>{l as string}</span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: cfg.color, fontVariantNumeric: "tabular-nums" }}>{typeof v === "number" ? fmt(v) : v}</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 16, display: "flex", gap: 14, justifyContent: "center" }}>
+                    <RateGauge label={cfg.stats[3][0] as string} value={cfg.rateA} color={cfg.color} />
+                    <RateGauge label={cfg.stats[4][0] as string} value={cfg.rateB} color={cfg.color} />
+                  </div>
                 </div>
               </div>
+
+              {/* Period breakdown chart */}
               <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                  <div><p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>\ud83d\udcca {campChan} \u2014 Period Breakdown</p><p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>Data by period label</p></div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>📊 {campChan} — Period Breakdown</p>
+                    <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>Data by period label</p>
+                  </div>
                   <ChartLegend items={cfg.lines} />
                 </div>
-                {cfg.pd.length === 0 ? <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data</div> : (
+                {cfg.periodData.length === 0 ? (
+                  <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data for this period</div>
+                ) : (
                   <ResponsiveContainer width="100%" height={240}>
-                    <LineChart data={cfg.pd} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <LineChart data={cfg.periodData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 10.5, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={32} />
                       <Tooltip content={<CustomTooltip />} />
-                      {cfg.lines.map(([key, color]: any) => (<Line key={key} type="monotone" dataKey={key} stroke={color} strokeWidth={2.5} dot={{ r: 4, fill: color, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }} />))}
+                      {cfg.lines.map(([key, color]) => (
+                        <Line key={key} type="monotone" dataKey={key} stroke={color} strokeWidth={2.5} dot={{ r: 4, fill: color, strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 6, strokeWidth: 0 }} />
+                      ))}
                     </LineChart>
                   </ResponsiveContainer>
                 )}
               </div>
             </div>
+
+            {/* Period data table */}
+            <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>📋 Period Data — {campChan}</p>
+              {cfg.periodData.length === 0 ? <p style={{ color: "#A8A29E", fontSize: 13, textAlign: "center", padding: "24px 0" }}>No periods found</p> : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead><tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
+                    {["Period", ...cfg.lines.map(([k]) => k), "Rate 1", "Rate 2"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11.5, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {cfg.periodData.map((row, i) => {
+                      const vals = cfg.lines.map(([k]) => row[k] ?? 0);
+                      const r1 = rate(vals[1], vals[0]);
+                      const r2 = rate(vals[2] ?? 0, vals[0]);
+                      return (
+                        <tr key={i} style={{ borderBottom: "1px solid #FAFAF9" }}>
+                          <td style={{ padding: "10px 12px", fontWeight: 600, color: "#1C1917" }}>
+                            <span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 8px", borderRadius: 6, fontSize: 11.5 }}>{row.name}</span>
+                          </td>
+                          {vals.map((v, vi) => (
+                            <td key={vi} style={{ padding: "10px 12px", fontWeight: vi === 0 ? 600 : 400, color: vi === 0 ? "#1C1917" : "#57534E" }}>{fmt(v)}</td>
+                          ))}
+                          <td style={{ padding: "10px 12px" }}><span style={{ background: cfg.bg, color: cfg.color, padding: "2px 8px", borderRadius: 8, fontSize: 11.5, fontWeight: 700 }}>{r1}%</span></td>
+                          <td style={{ padding: "10px 12px" }}><span style={{ background: cfg.bg, color: cfg.color, padding: "2px 8px", borderRadius: 8, fontSize: 11.5, fontWeight: 700 }}>{r2}%</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         );
       })()}
 
+      {/* ═══ LEADS ═══ */}
       {tab === "Leads" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 20 }}>
-            {[{ icon: "\ud83d\udce5", label: "Total", value: leads.length, color: "#6366F1" }, { icon: "\ud83d\udd35", label: "New", value: leads.filter((l) => l.status === "new").length, color: "#3B82F6" }, { icon: "\ud83d\udfe1", label: "In Progress", value: activeLeads, color: "#F59E0B" }, { icon: "\u2705", label: "Won", value: wonLeads, color: "#16A34A" }, { icon: "\u274c", label: "Lost", value: lostLeads, color: "#EF4444" }].map(({ icon, label, value, color }) => (
+            {[{ icon: "📥", label: "Total", value: leads.length, color: "#6366F1" }, { icon: "🔵", label: "New", value: leads.filter((l) => l.status === "new").length, color: "#3B82F6" }, { icon: "🟡", label: "In Progress", value: activeLeads, color: "#F59E0B" }, { icon: "✅", label: "Won", value: wonLeads, color: "#16A34A" }, { icon: "❌", label: "Lost", value: lostLeads, color: "#EF4444" }].map(({ icon, label, value, color }) => (
               <div key={label} style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 18, textAlign: "center" }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
                 <p style={{ fontSize: 30, fontWeight: 800, color, lineHeight: 1 }}>{value}</p>
@@ -463,93 +550,67 @@ export default function PortalDashboard() {
               </div>
             ))}
           </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🎯 Lead Status Breakdown</p>
+              {leadStatusData.length === 0 ? <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No leads</div> : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={leadStatusData} layout="vertical" margin={{ top: 0, right: 30, left: 40, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11.5, fill: "#57534E" }} axisLine={false} tickLine={false} width={70} />
+                    <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>{leadStatusData.map((e, i) => <Cell key={i} fill={e.color} />)}</Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>💎 Revenue Pipeline</p>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={[{ name: "Won Revenue", value: leads.filter((l) => l.status === "won").reduce((s, l) => s + (l.expected_revenue ?? 0), 0) }, { name: "Pipeline", value: leads.filter((l) => !["won", "lost"].includes(l.status)).reduce((s, l) => s + (l.expected_revenue ?? 0), 0) }, { name: "Lost", value: leads.filter((l) => l.status === "lost").reduce((s, l) => s + (l.expected_revenue ?? 0), 0) }].filter((d) => d.value > 0)} cx="50%" cy="50%" outerRadius={80} paddingAngle={3} dataKey="value">
+                    {[0, 1, 2].map((i) => <Cell key={i} fill={["#16A34A", "#F59E0B", "#EF4444"][i]} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} formatter={(v: any) => `₹${fmtINR(v)}`} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
           <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>\ud83d\udccb All Leads</p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>📋 All Leads with History</p>
+              <Link href="/portal/leads" style={{ fontSize: 12.5, color: "#E8611A", textDecoration: "none", fontWeight: 600 }}>Manage All →</Link>
+            </div>
             {leads.length === 0 ? <p style={{ textAlign: "center", color: "#A8A29E", padding: "40px 0", fontSize: 13 }}>No leads yet</p> : (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead><tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
-                  {["Lead", "Period", "Status", "Location", "Revenue", "Cycle", "Status Change"].map((h) => (
+                  {["Lead", "Period Generated", "Status", "Location", "Revenue", "Cycle", "Status Change"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11.5, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
                   ))}
                 </tr></thead>
                 <tbody>
-                  {leads.map((l) => {
+                  {leads.slice(0, 10).map((l) => {
                     const entry = l.data_entries;
                     return (
                       <tr key={l.id} style={{ borderBottom: "1px solid #FAFAF9", background: l.is_updated_this_cycle ? "#FFFBEB" : "transparent" }}>
-                        <td style={{ padding: "10px 12px", fontWeight: 600, color: "#1C1917" }}>{l.name}{l.is_updated_this_cycle && <span style={{ marginLeft: 5, fontSize: 10, background: "#FEF3C7", color: "#92400E", padding: "1px 6px", borderRadius: 8, fontWeight: 700 }}>\u2191</span>}</td>
-                        <td style={{ padding: "10px 12px", fontSize: 12 }}>{entry ? <span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 7px", borderRadius: 6, fontSize: 11.5, fontWeight: 500 }}>{entry.entry_label || new Date(entry.period_start).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span> : <span style={{ color: "#D6D3D1" }}>\u2014</span>}</td>
+                        <td style={{ padding: "10px 12px", fontWeight: 600, color: "#1C1917" }}>
+                          {l.name}{l.is_updated_this_cycle && <span style={{ marginLeft: 5, fontSize: 10, background: "#FEF3C7", color: "#92400E", padding: "1px 6px", borderRadius: 8, fontWeight: 700 }}>UPDATED</span>}
+                        </td>
+                        <td style={{ padding: "10px 12px", fontSize: 12 }}>
+                          {entry ? (
+                            <span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 7px", borderRadius: 6, fontSize: 11.5, fontWeight: 500 }}>
+                              {entry.entry_label || `${new Date(entry.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}–${new Date(entry.period_end).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "2-digit" })}`}
+                            </span>
+                          ) : <span style={{ color: "#D6D3D1" }}>—</span>}
+                        </td>
                         <td style={{ padding: "10px 12px" }}><span style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 10, fontWeight: 600, background: l.status === "won" ? "#DCFCE7" : l.status === "lost" ? "#FEE2E2" : "#EEF2FF", color: l.status === "won" ? "#15803D" : l.status === "lost" ? "#B91C1C" : "#4338CA" }}>{l.status.charAt(0).toUpperCase() + l.status.slice(1)}</span></td>
-                        <td style={{ padding: "10px 12px", color: "#78716C", fontSize: 12.5 }}>{l.location ?? "\u2014"}</td>
-                        <td style={{ padding: "10px 12px", fontWeight: 600, color: "#16A34A" }}>{l.expected_revenue ? fmtINR(l.expected_revenue) : "\u2014"}</td>
-                        <td style={{ padding: "10px 12px", color: "#A8A29E", fontSize: 12 }}>{l.cycle_label ?? "\u2014"}</td>
-                        <td style={{ padding: "10px 12px", fontSize: 12 }}>{l.previous_status && l.previous_status !== l.status ? <span><span style={{ background: "#FEE2E2", color: "#B91C1C", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>{l.previous_status}</span>{" \u2192 "}<span style={{ background: "#DCFCE7", color: "#15803D", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>{l.status}</span></span> : <span style={{ color: "#D6D3D1" }}>\u2014</span>}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === "Revenue" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
-            {[
-              { icon: "\u2705", label: "Collected", value: fmtINR(totalRev), color: "#16A34A" },
-              { icon: "\ud83d\udd2e", label: "Expected", value: fmtINR(expectedRev), color: "#D97706" },
-              { icon: "\ud83d\udce6", label: "Licences", value: totalLic.toLocaleString("en-IN"), color: "#0891B2" },
-              { icon: "\ud83c\udfc6", label: "Won Revenue", value: fmtINR(leads.filter(l => l.status === "won").reduce((s, l) => s + (l.expected_revenue ?? 0), 0)), color: "#16A34A" },
-            ].map(({ icon, label, value, color }) => (
-              <div key={label} style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20, textAlign: "center" }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
-                <p style={{ fontSize: 28, fontWeight: 800, color, lineHeight: 1 }}>{value}</p>
-                <p style={{ fontSize: 12.5, color: "#78716C", marginTop: 8, fontWeight: 600 }}>{label}</p>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 16 }}>\ud83d\udcb0 Revenue Timeline by Period</p>
-            {periodChartData.length === 0 ? <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data</div> : (
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={periodChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => fmtINR(v)} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="Revenue" stroke="#16A34A" strokeWidth={3} dot={{ r: 5, fill: "#16A34A", strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 7 }} name="Revenue" />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>\ud83d\udccb Period Revenue Breakdown</p>
-            {entries.length === 0 ? <p style={{ color: "#A8A29E", fontSize: 13, textAlign: "center", padding: "24px 0" }}>No periods found</p> : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead><tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
-                  {["Period", "Label", "Collected", "Expected", "Licences", "Collection %"].map((h) => (
-                    <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11.5, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
-                  ))}
-                </tr></thead>
-                <tbody>
-                  {entries.map((e) => {
-                    const pct = rate(e.total_revenue_collected ?? 0, e.expected_collection ?? 1);
-                    return (
-                      <tr key={e.id} style={{ borderBottom: "1px solid #FAFAF9" }}>
-                        <td style={{ padding: "10px 12px", color: "#78716C", fontSize: 12 }}>{e.period_start} \u2013 {e.period_end}</td>
-                        <td style={{ padding: "10px 12px" }}><span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 8px", borderRadius: 6, fontSize: 11.5, fontWeight: 600 }}>{e.entry_label || "\u2014"}</span></td>
-                        <td style={{ padding: "10px 12px", fontWeight: 700, color: "#16A34A" }}>{fmtINR(e.total_revenue_collected ?? 0)}</td>
-                        <td style={{ padding: "10px 12px", fontWeight: 600, color: "#D97706" }}>{fmtINR(e.expected_collection ?? 0)}</td>
-                        <td style={{ padding: "10px 12px", color: "#0891B2", fontWeight: 600 }}>{(e.total_licences ?? 0).toLocaleString("en-IN")}</td>
-                        <td style={{ padding: "10px 12px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ flex: 1, height: 6, background: "#F0EEEC", borderRadius: 3 }}>
-                              <div style={{ width: `${Math.min(pct, 100)}%`, height: "100%", background: pct >= 100 ? "#16A34A" : pct >= 70 ? "#D97706" : "#EF4444", borderRadius: 3 }} />
-                            </div>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: pct >= 100 ? "#16A34A" : pct >= 70 ? "#D97706" : "#EF4444", minWidth: 36 }}>{pct}%</span>
-                          </div>
+                        <td style={{ padding: "10px 12px", color: "#78716C", fontSize: 12.5 }}>{l.location ?? "—"}</td>
+                        <td style={{ padding: "10px 12px", fontWeight: 600, color: "#16A34A" }}>{l.expected_revenue ? `₹${fmtINR(l.expected_revenue)}` : "—"}</td>
+                        <td style={{ padding: "10px 12px", color: "#A8A29E", fontSize: 12 }}>{l.cycle_label ?? "—"}</td>
+                        <td style={{ padding: "10px 12px", fontSize: 12 }}>
+                          {l.previous_status && l.previous_status !== l.status ? <span><span style={{ background: "#FEE2E2", color: "#B91C1C", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>{l.previous_status}</span> → <span style={{ background: "#DCFCE7", color: "#15803D", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>{l.status}</span></span> : <span style={{ color: "#D6D3D1" }}>—</span>}
                         </td>
                       </tr>
                     );
@@ -561,69 +622,421 @@ export default function PortalDashboard() {
         </div>
       )}
 
-      {tab === "Reports" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 16 }}>\ud83d\udcc8 Campaign Trend</p>
-            {periodChartData.length === 0 ? <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data</div> : (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={periodChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="Email" stroke="#3B82F6" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="WA" stroke="#10B981" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="Calls" stroke={accent} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
+      {/* ═══ REVENUE ═══ */}
+      {tab === "Revenue" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 20 }}>
+            {[
+              { icon: "₹", title: "Revenue Collected", value: `₹${fmtINR(totalRev)}`, sub: `Across ${entries.length} entries`, color: "#16A34A", bg: "#F0FDF4", border: "#A7F3D0" },
+              { icon: "🔮", title: "Expected Collection", value: `₹${fmtINR(expectedRev)}`, sub: "Pipeline value", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
+              { icon: "📦", title: "Total Licences", value: totalLic.toLocaleString("en-IN"), sub: "Units sold", color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE" },
+            ].map(({ icon, title, value, sub, color, bg, border }) => (
+              <div key={title} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 12, padding: 24, textAlign: "center" }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>{icon}</div>
+                <p style={{ fontSize: 32, fontWeight: 800, color, lineHeight: 1 }}>{value}</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#1C1917", marginTop: 8 }}>{title}</p>
+                <p style={{ fontSize: 12, color: "#78716C", marginTop: 4 }}>{sub}</p>
+              </div>
+            ))}
           </div>
-          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 16 }}>\ud83d\udcb0 Revenue Timeline</p>
-            {periodChartData.length === 0 ? <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data</div> : (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={periodChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => fmtINR(v)} />
-                  <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} formatter={(v: any) => fmtINR(v)} />
-                  <Line type="monotone" dataKey="Revenue" stroke="#16A34A" strokeWidth={3} dot={{ r: 4, fill: "#16A34A" }} activeDot={{ r: 6 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20, gridColumn: "span 2" }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 16 }}>\ud83d\uddc2\ufe0f Period Summary Table</p>
-            {entries.length === 0 ? <p style={{ color: "#A8A29E", fontSize: 13, textAlign: "center", padding: "24px 0" }}>No periods</p> : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead><tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
-                  {["Period", "Email Sent", "WA Sent", "Calls", "Revenue", "Licences", "Leads"].map((h) => (
-                    <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11.5, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
-                  ))}
-                </tr></thead>
-                <tbody>
-                  {entries.map((e) => {
-                    const pu = updates.filter((u) => u.update_date >= e.period_start && u.update_date <= e.period_end);
-                    const periodLeads = leads.filter((l) => l.data_entry_id === e.id);
-                    return (
-                      <tr key={e.id} style={{ borderBottom: "1px solid #FAFAF9" }}>
-                        <td style={{ padding: "10px 12px" }}><span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 8px", borderRadius: 6, fontSize: 11.5, fontWeight: 600 }}>{e.entry_label || e.period_start}</span></td>
-                        <td style={{ padding: "10px 12px", color: "#2563EB", fontWeight: 600 }}>{fmt(e.email_sent + pu.filter((u: any) => u.channel === "email").reduce((s: number, u: any) => s + u.email_sent, 0))}</td>
-                        <td style={{ padding: "10px 12px", color: "#16A34A", fontWeight: 600 }}>{fmt(e.whatsapp_sent + pu.filter((u: any) => u.channel === "whatsapp").reduce((s: number, u: any) => s + u.whatsapp_sent, 0))}</td>
-                        <td style={{ padding: "10px 12px", color: "#7C3AED", fontWeight: 600 }}>{fmt(e.calls_made + pu.filter((u: any) => u.channel === "calls").reduce((s: number, u: any) => s + u.calls_made, 0))}</td>
-                        <td style={{ padding: "10px 12px", fontWeight: 700, color: "#16A34A" }}>{fmtINR(e.total_revenue_collected ?? 0)}</td>
-                        <td style={{ padding: "10px 12px", color: "#0891B2", fontWeight: 600 }}>{e.total_licences ?? 0}</td>
-                        <td style={{ padding: "10px 12px", fontWeight: 600, color: accent }}>{periodLeads.length}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+            <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>💰 Revenue Timeline</p>
+                <ChartLegend items={[["Revenue", "#E8611A"]]} />
+              </div>
+              {periodChartData.length === 0 ? <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#A8A29E", fontSize: 13 }}>No data</div> : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={periodChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "#A8A29E" }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `₹${fmtINR(v)}`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Line type="monotone" dataKey="Revenue" stroke="#E8611A" strokeWidth={3} dot={{ r: 5, fill: "#E8611A", strokeWidth: 2, stroke: "#fff" }} activeDot={{ r: 7, strokeWidth: 0 }} name="Revenue" />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            {clientRevData.length > 0 && (
+              <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 16 }}>🏢 Top Clients by Revenue</p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={clientRevData} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${fmtINR(v)}`} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11.5, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                    <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} formatter={(v: any) => `₹${fmtINR(v)}`} />
+                    <Bar dataKey="Revenue" fill="#E8611A" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </div>
         </div>
       )}
+      {/* ═══ REPORTS ═══ */}
+      {tab === "Reports" && (() => {
+        const REPORT_TABS = ["Leads", "Revenue", "Top Performing"];
+
+        // ── Geography helpers ──────────────────────────────────────────────
+        const groupBy = (arr: any[], key: string) => {
+          const map: Record<string, any[]> = {};
+          arr.forEach((item) => {
+            const k = item[key] ?? "Unknown";
+            if (!map[k]) map[k] = [];
+            map[k].push(item);
+          });
+          return Object.entries(map).sort((a, b) => b[1].length - a[1].length);
+        };
+
+        // parse "City, State, Country" or any subset from location field
+        const parseLocation = (loc: string | undefined) => {
+          if (!loc) return { city: "Unknown", state: "Unknown", country: "Unknown" };
+          const parts = loc.split(",").map((p) => p.trim());
+          return {
+            city: parts[0] ?? "Unknown",
+            state: parts[1] ?? "Unknown",
+            country: parts[2] ?? "Unknown",
+          };
+        };
+
+        const leadsWithGeo = leads.map((l) => ({ ...l, ...parseLocation(l.location) }));
+        const wonLeadsGeo = leadsWithGeo.filter((l) => l.status === "won");
+
+        // Lead geography
+        const leadsByCountry = groupBy(leadsWithGeo, "country");
+        const leadsByState = groupBy(leadsWithGeo, "state");
+        const leadsByCity = groupBy(leadsWithGeo, "city");
+
+        // Revenue geography — from leads with expected_revenue
+        const revByCountry = Object.entries(
+          leadsWithGeo.reduce((acc: Record<string, number>, l) => {
+            acc[l.country] = (acc[l.country] ?? 0) + (l.expected_revenue ?? 0);
+            return acc;
+          }, {})
+        ).sort((a, b) => (b[1] as number) - (a[1] as number));
+
+        const revByState = Object.entries(
+          leadsWithGeo.reduce((acc: Record<string, number>, l) => {
+            acc[l.state] = (acc[l.state] ?? 0) + (l.expected_revenue ?? 0);
+            return acc;
+          }, {})
+        ).sort((a, b) => (b[1] as number) - (a[1] as number));
+
+        const revByCity = Object.entries(
+          leadsWithGeo.reduce((acc: Record<string, number>, l) => {
+            acc[l.city] = (acc[l.city] ?? 0) + (l.expected_revenue ?? 0);
+            return acc;
+          }, {})
+        ).sort((a, b) => (b[1] as number) - (a[1] as number));
+
+        // Lead status distribution
+        const statusDist = [
+          { label: "New", color: "#3B82F6", count: leads.filter((l) => l.status === "new").length },
+          { label: "Contacted", color: "#F59E0B", count: leads.filter((l) => l.status === "contacted").length },
+          { label: "Qualified", color: "#F97316", count: leads.filter((l) => l.status === "qualified").length },
+          { label: "Proposal", color: "#8B5CF6", count: leads.filter((l) => l.status === "proposal").length },
+          { label: "Negotiation", color: "#EC4899", count: leads.filter((l) => l.status === "negotiation").length },
+          { label: "Won", color: "#16A34A", count: leads.filter((l) => l.status === "won").length },
+          { label: "Lost", color: "#EF4444", count: leads.filter((l) => l.status === "lost").length },
+        ].filter((d) => d.count > 0);
+
+        // Top performing schools — sorted by revenue desc, then by volume
+        const topSchools = [...leadsWithGeo]
+          .sort((a, b) => (b.expected_revenue ?? 0) - (a.expected_revenue ?? 0))
+          .slice(0, 15);
+
+        const GeoTable = ({ title, rows, valueLabel, valueFormatter }: { title: string; rows: [string, any][]; valueLabel: string; valueFormatter: (v: any) => string }) => (
+          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #F0EEEC", background: "#FAFAF9" }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>{title}</p>
+              <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>{rows.length} entries</p>
+            </div>
+            <div style={{ maxHeight: 320, overflowY: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+                  <tr style={{ borderBottom: "1px solid #F0EEEC" }}>
+                    <th style={{ textAlign: "left", padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>#</th>
+                    <th style={{ textAlign: "left", padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>Name</th>
+                    <th style={{ textAlign: "right", padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>Schools</th>
+                    <th style={{ textAlign: "right", padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>{valueLabel}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 20).map(([name, val], i) => (
+                    <tr key={name} style={{ borderBottom: "1px solid #FAFAF9", background: i % 2 === 0 ? "#fff" : "#FAFAF9" }}>
+                      <td style={{ padding: "9px 14px", color: "#A8A29E", fontSize: 12 }}>{i + 1}</td>
+                      <td style={{ padding: "9px 14px", fontWeight: 600, color: "#1C1917" }}>{name}</td>
+                      <td style={{ padding: "9px 14px", textAlign: "right", color: "#57534E" }}>{Array.isArray(val) ? val.length : "—"}</td>
+                      <td style={{ padding: "9px 14px", textAlign: "right", fontWeight: 700, color: "#E8611A" }}>{valueFormatter(val)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+
+        return (
+          <div>
+            {/* Report sub-tabs */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 20, background: "#fff", border: "1px solid #E7E5E4", borderRadius: 10, padding: 4, width: "fit-content" }}>
+              {REPORT_TABS.map((rt) => (
+                <button key={rt} onClick={() => setReportTab(rt)} style={{ padding: "8px 18px", fontSize: 13, fontWeight: 600, border: "none", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", background: reportTab === rt ? "#1C1917" : "transparent", color: reportTab === rt ? "#fff" : "#78716C", transition: "all 0.15s" }}>
+                  {rt === "Leads" ? "🎯 " : rt === "Revenue" ? "💰 " : "🏆 "}{rt}
+                </button>
+              ))}
+            </div>
+
+            {/* ── LEADS REPORT ── */}
+            {reportTab === "Leads" && (
+              <div>
+                {/* Status summary bar */}
+                <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🎯 Lead Status Distribution — {leads.length} Total</p>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {statusDist.map((s) => (
+                      <div key={s.label} style={{ flex: 1, minWidth: 100, background: `${s.color}10`, border: `1px solid ${s.color}30`, borderRadius: 10, padding: "14px 12px", textAlign: "center" }}>
+                        <p style={{ fontSize: 28, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.count}</p>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: "#57534E", marginTop: 6 }}>{s.label}</p>
+                        <p style={{ fontSize: 11, color: "#A8A29E", marginTop: 3 }}>{rate(s.count, leads.length)}%</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Status progress bar */}
+                  <div style={{ marginTop: 14, height: 8, borderRadius: 4, overflow: "hidden", display: "flex", gap: 1 }}>
+                    {statusDist.map((s) => (
+                      <div key={s.label} title={`${s.label}: ${s.count}`} style={{ height: "100%", background: s.color, flex: s.count, transition: "flex 0.4s", minWidth: s.count > 0 ? 2 : 0 }} />
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
+                  <GeoTable
+                    title="🌍 Country-wise School Count"
+                    rows={leadsByCountry}
+                    valueLabel="Win Rate"
+                    valueFormatter={(arr) => `${rate(arr.filter((l: any) => l.status === "won").length, arr.length)}%`}
+                  />
+                  <GeoTable
+                    title="🗺️ State-wise School Count"
+                    rows={leadsByState}
+                    valueLabel="Win Rate"
+                    valueFormatter={(arr) => `${rate(arr.filter((l: any) => l.status === "won").length, arr.length)}%`}
+                  />
+                  <GeoTable
+                    title="🏙️ City-wise School Count"
+                    rows={leadsByCity}
+                    valueLabel="Win Rate"
+                    valueFormatter={(arr) => `${rate(arr.filter((l: any) => l.status === "won").length, arr.length)}%`}
+                  />
+                </div>
+
+                {/* Lead status pie + bar combo */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🎯 Status Pie</p>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie data={statusDist.map((s) => ({ name: s.label, value: s.count, color: s.color }))} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
+                          {statusDist.map((s, i) => <Cell key={i} fill={s.color} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 8 }}>
+                      {statusDist.map((s) => (
+                        <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, display: "inline-block", flexShrink: 0 }} />
+                          <span style={{ color: "#57534E", flex: 1 }}>{s.label}</span>
+                          <span style={{ fontWeight: 700, color: "#1C1917" }}>{s.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🏙️ Top 10 Cities by School Count</p>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={leadsByCity.slice(0, 10).map(([city, arr]) => ({ city, count: arr.length, won: arr.filter((l: any) => l.status === "won").length }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="city" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                        <Bar dataKey="count" name="Total" fill="#6366F1" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="won" name="Won" fill="#16A34A" radius={[0, 4, 4, 0]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── REVENUE REPORT ── */}
+            {reportTab === "Revenue" && (
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 }}>
+                  {[
+                    { icon: "₹", label: "Total Pipeline", value: `₹${fmtINR(leads.reduce((s, l) => s + (l.expected_revenue ?? 0), 0))}`, color: "#E8611A", bg: "#FFF7ED" },
+                    { icon: "✅", label: "Won Revenue", value: `₹${fmtINR(leads.filter((l) => l.status === "won").reduce((s, l) => s + (l.expected_revenue ?? 0), 0))}`, color: "#16A34A", bg: "#F0FDF4" },
+                    { icon: "🔥", label: "Active Pipeline", value: `₹${fmtINR(leads.filter((l) => !["won", "lost"].includes(l.status)).reduce((s, l) => s + (l.expected_revenue ?? 0), 0))}`, color: "#F59E0B", bg: "#FFFBEB" },
+                  ].map(({ icon, label, value, color, bg }) => (
+                    <div key={label} style={{ background: bg, border: `1px solid ${color}25`, borderRadius: 12, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+                      <span style={{ fontSize: 30 }}>{icon}</span>
+                      <div>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: "#A8A29E", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</p>
+                        <p style={{ fontSize: 24, fontWeight: 800, color, lineHeight: 1.2 }}>{value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
+                  <GeoTable
+                    title="🌍 Country-wise Revenue"
+                    rows={revByCountry}
+                    valueLabel="Revenue"
+                    valueFormatter={(v) => `₹${fmtINR(v as number)}`}
+                  />
+                  <GeoTable
+                    title="🗺️ State-wise Revenue"
+                    rows={revByState}
+                    valueLabel="Revenue"
+                    valueFormatter={(v) => `₹${fmtINR(v as number)}`}
+                  />
+                  <GeoTable
+                    title="🏙️ City-wise Revenue"
+                    rows={revByCity}
+                    valueLabel="Revenue"
+                    valueFormatter={(v) => `₹${fmtINR(v as number)}`}
+                  />
+                </div>
+
+                {/* Revenue bar charts */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🗺️ Top States by Revenue</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={revByState.slice(0, 8).map(([state, rev]) => ({ state, Revenue: rev as number }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${fmtINR(v)}`} />
+                        <YAxis type="category" dataKey="state" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} formatter={(v: any) => `₹${fmtINR(v)}`} />
+                        <Bar dataKey="Revenue" fill="#E8611A" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🏙️ Top Cities by Revenue</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={revByCity.slice(0, 8).map(([city, rev]) => ({ city, Revenue: rev as number }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${fmtINR(v)}`} />
+                        <YAxis type="category" dataKey="city" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} formatter={(v: any) => `₹${fmtINR(v)}`} />
+                        <Bar dataKey="Revenue" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── TOP PERFORMING ── */}
+            {reportTab === "Top Performing" && (
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 16 }}>
+                  {[
+                    { icon: "🏆", label: "Top School (Revenue)", value: topSchools[0]?.name ?? "—", sub: topSchools[0]?.expected_revenue ? `₹${fmtINR(topSchools[0].expected_revenue)}` : "—", color: "#E8611A" },
+                    { icon: "📍", label: "Top City", value: leadsByCity[0]?.[0] ?? "—", sub: `${(leadsByCity[0]?.[1] as any[])?.length ?? 0} schools`, color: "#6366F1" },
+                    { icon: "🗺️", label: "Top State", value: leadsByState[0]?.[0] ?? "—", sub: `${(leadsByState[0]?.[1] as any[])?.length ?? 0} schools`, color: "#0891B2" },
+                    { icon: "✅", label: "Best Win Rate City", value: (() => { const best = leadsByCity.filter(([, arr]) => (arr as any[]).length >= 2).sort((a, b) => rate((b[1] as any[]).filter((l: any) => l.status === "won").length, (b[1] as any[]).length) - rate((a[1] as any[]).filter((l: any) => l.status === "won").length, (a[1] as any[]).length))[0]; return best?.[0] ?? "—"; })(), sub: (() => { const best = leadsByCity.filter(([, arr]) => (arr as any[]).length >= 2).sort((a, b) => rate((b[1] as any[]).filter((l: any) => l.status === "won").length, (b[1] as any[]).length) - rate((a[1] as any[]).filter((l: any) => l.status === "won").length, (a[1] as any[]).length))[0]; return best ? `${rate((best[1] as any[]).filter((l: any) => l.status === "won").length, (best[1] as any[]).length)}% win rate` : "—"; })(), color: "#16A34A" },
+                  ].map(({ icon, label, value, sub, color }) => (
+                    <div key={label} style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 18 }}>
+                      <div style={{ fontSize: 26, marginBottom: 8 }}>{icon}</div>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: "#A8A29E", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{label}</p>
+                      <p style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1.2 }}>{value}</p>
+                      <p style={{ fontSize: 12, color: "#78716C", marginTop: 4 }}>{sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, overflow: "hidden", marginBottom: 14 }}>
+                  <div style={{ padding: "14px 20px", borderBottom: "1px solid #F0EEEC", background: "#FAFAF9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>🏆 Top Performing Schools</p>
+                      <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>Ranked by expected revenue</p>
+                    </div>
+                    <span style={{ fontSize: 12, color: "#78716C", background: "#F5F4F0", padding: "4px 10px", borderRadius: 8 }}>{topSchools.length} schools</span>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
+                        {["#", "School", "Location", "City", "State", "Revenue", "Volume", "Status", "Cycle"].map((h) => (
+                          <th key={h} style={{ textAlign: "left", padding: "9px 14px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topSchools.map((l, i) => (
+                        <tr key={l.id} style={{ borderBottom: "1px solid #FAFAF9", background: i % 2 === 0 ? "#fff" : "#FAFAF9" }}>
+                          <td style={{ padding: "10px 14px", color: "#A8A29E", fontSize: 12, fontWeight: 700 }}>
+                            {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`}
+                          </td>
+                          <td style={{ padding: "10px 14px", fontWeight: 700, color: "#1C1917" }}>{l.name}</td>
+                          <td style={{ padding: "10px 14px", color: "#78716C", fontSize: 12 }}>{l.location ?? "—"}</td>
+                          <td style={{ padding: "10px 14px", color: "#57534E", fontSize: 12 }}>{l.city}</td>
+                          <td style={{ padding: "10px 14px", color: "#57534E", fontSize: 12 }}>{l.state}</td>
+                          <td style={{ padding: "10px 14px", fontWeight: 700, color: "#16A34A" }}>{l.expected_revenue ? `₹${fmtINR(l.expected_revenue)}` : "—"}</td>
+                          <td style={{ padding: "10px 14px", color: "#57534E" }}>{l.expected_volume ? fmt(l.expected_volume) : "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <span style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 10, fontWeight: 600, background: l.status === "won" ? "#DCFCE7" : l.status === "lost" ? "#FEE2E2" : "#EEF2FF", color: l.status === "won" ? "#15803D" : l.status === "lost" ? "#B91C1C" : "#4338CA" }}>
+                              {l.status.charAt(0).toUpperCase() + l.status.slice(1)}
+                            </span>
+                          </td>
+                          <td style={{ padding: "10px 14px", color: "#A8A29E", fontSize: 12 }}>{l.cycle_label ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* City & State bar charts side by side */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🏙️ City Leaderboard</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={leadsByCity.slice(0, 8).map(([city, arr]) => ({ city, Total: (arr as any[]).length, Won: (arr as any[]).filter((l: any) => l.status === "won").length }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="city" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                        <Bar dataKey="Total" name="Total Schools" fill="#6366F1" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="Won" name="Won" fill="#16A34A" radius={[0, 4, 4, 0]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>🗺️ State Leaderboard</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={leadsByState.slice(0, 8).map(([state, arr]) => ({ state, Total: (arr as any[]).length, Won: (arr as any[]).filter((l: any) => l.status === "won").length }))} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F4F0" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#A8A29E" }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="state" tick={{ fontSize: 11, fill: "#57534E" }} axisLine={false} tickLine={false} width={55} />
+                        <Tooltip contentStyle={{ background: "#1C1917", border: "none", borderRadius: 8, color: "#F5F4F0", fontSize: 12 }} />
+                        <Bar dataKey="Total" name="Total Schools" fill="#0891B2" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="Won" name="Won" fill="#16A34A" radius={[0, 4, 4, 0]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
