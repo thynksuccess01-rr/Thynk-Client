@@ -215,7 +215,7 @@ export default function DataPanelPage() {
               {activeEntry&&activeEntry!=="new"&&(
                 <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:10,padding:16,marginBottom:10}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <h3 style={{fontSize:13.5,fontWeight:600,color:"#1C1917"}}>Campaign Updates <span style={{fontSize:12,color:"#A8A29E",fontWeight:400"}}>({updates.length} updates)</span></h3>
+                    <h3 style={{fontSize:13.5,fontWeight:600,color:"#1C1917"}}>Campaign Updates <span style={{fontSize:12,color:"#A8A29E",fontWeight:400}}>({updates.length} updates)</span></h3>
                     <button onClick={()=>setShowUpdateForm(true)} className="btn-primary" style={{padding:"5px 12px",fontSize:12}}>
                       <Plus size={12}/> Add Update
                     </button>
