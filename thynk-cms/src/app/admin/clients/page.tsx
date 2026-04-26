@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import PageHeader from "@/components/admin/PageHeader";
-import { Plus, Search, Edit2, Trash2, UserPlus, X, Check } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Check, X, Eye } from "lucide-react";
 import toast from "react-hot-toast";
 import { Client } from "@/types";
+import Link from "next/link";
 
 const EMPTY: Partial<Client> = {
   name: "", slug: "", industry: "", contact_email: "", contact_phone: "",
@@ -13,10 +14,10 @@ const EMPTY: Partial<Client> = {
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
-  const [search, setSearch] = useState("");
-  const [modal, setModal] = useState(false);
+  const [search,  setSearch]  = useState("");
+  const [modal,   setModal]   = useState(false);
   const [editing, setEditing] = useState<Partial<Client>>(EMPTY);
-  const [saving, setSaving] = useState(false);
+  const [saving,  setSaving]  = useState(false);
   const supabase = createClient();
 
   async function load() {
@@ -36,17 +37,14 @@ export default function ClientsPage() {
     const payload = { ...editing, slug };
     if (editing.id) {
       const { error } = await supabase.from("clients").update(payload).eq("id", editing.id);
-      if (error) { toast.error(error.message); } else {
-        toast.success("Client updated");
-        // Auto-create portal login if email present
-        setModal(false); load();
-      }
+      if (error) toast.error(error.message);
+      else { toast.success("Client updated"); setModal(false); load(); }
     } else {
       const { data, error } = await supabase.from("clients").insert(payload).select().single();
-      if (error) { toast.error(error.message); } else {
+      if (error) toast.error(error.message);
+      else {
         toast.success("Client created");
         if (editing.contact_email) {
-          // Trigger auto-create user via API
           await fetch("/api/admin/users/auto-create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -66,29 +64,23 @@ export default function ClientsPage() {
     else { toast.success("Client deleted"); load(); }
   }
 
-  function openCreate() { setEditing(EMPTY); setModal(true); }
-  function openEdit(c: Client) { setEditing(c); setModal(true); }
-
   return (
     <div>
       <PageHeader
         title="Clients"
         subtitle={`${clients.length} client${clients.length !== 1 ? "s" : ""} registered`}
         action={
-          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+          <button onClick={() => { setEditing(EMPTY); setModal(true); }} className="btn-primary flex items-center gap-2">
             <Plus size={16} /> Add Client
           </button>
         }
       />
 
-      {/* Search */}
       <div className="relative mb-6 max-w-sm">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#A86035" }} />
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          className="input pl-9" placeholder="Search clients..." />
+        <input value={search} onChange={e => setSearch(e.target.value)} className="input pl-9" placeholder="Search clients..." />
       </div>
 
-      {/* Table */}
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -101,7 +93,7 @@ export default function ClientsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={6} className="text-center py-16 text-sm" style={{ color: "#A86035" }}>
-                No clients found. <button onClick={openCreate} className="underline">Add one</button>
+                No clients found. <button onClick={() => { setEditing(EMPTY); setModal(true); }} className="underline">Add one</button>
               </td></tr>
             ) : filtered.map(c => (
               <tr key={c.id} style={{ borderBottom: "1px solid #FAF4E8" }} className="hover:bg-amber-50 transition-colors">
@@ -112,7 +104,12 @@ export default function ClientsPage() {
                       {c.name.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-medium" style={{ color: "#1A0F08" }}>{c.name}</p>
+                      {/* Clickable name → client detail page */}
+                      <Link href={`/admin/clients/${c.id}`}
+                        className="font-semibold hover:underline"
+                        style={{ color: "#1A0F08" }}>
+                        {c.name}
+                      </Link>
                       <p className="text-xs" style={{ color: "#A86035" }}>/{c.slug}</p>
                     </div>
                   </div>
@@ -134,11 +131,16 @@ export default function ClientsPage() {
                   </span>
                 </td>
                 <td className="px-5 py-4">
-                  <div className="flex gap-2">
-                    <button onClick={() => openEdit(c)} className="btn-ghost p-1.5 rounded-lg hover:bg-amber-100">
+                  <div className="flex gap-1">
+                    <Link href={`/admin/clients/${c.id}`}
+                      className="p-1.5 rounded-lg hover:bg-blue-50 flex items-center justify-center"
+                      title="View details">
+                      <Eye size={14} style={{ color: "#3B82F6" }} />
+                    </Link>
+                    <button onClick={() => { setEditing(c); setModal(true); }} className="p-1.5 rounded-lg hover:bg-amber-100">
                       <Edit2 size={14} style={{ color: "#A86035" }} />
                     </button>
-                    <button onClick={() => deleteClient(c.id)} className="btn-ghost p-1.5 rounded-lg hover:bg-red-50">
+                    <button onClick={() => deleteClient(c.id)} className="p-1.5 rounded-lg hover:bg-red-50">
                       <Trash2 size={14} style={{ color: "#EF4444" }} />
                     </button>
                   </div>
@@ -149,7 +151,7 @@ export default function ClientsPage() {
         </table>
       </div>
 
-      {/* Modal */}
+      {/* Edit/Create Modal */}
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(26,15,8,0.6)", backdropFilter: "blur(4px)" }}>
@@ -175,7 +177,7 @@ export default function ClientsPage() {
                   <input className="input" value={editing.industry ?? ""} onChange={e => setEditing({ ...editing, industry: e.target.value })} placeholder="EdTech" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#A86035" }}>Contact Email (→ auto creates login)</label>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#A86035" }}>Contact Email</label>
                   <input className="input" type="email" value={editing.contact_email ?? ""} onChange={e => setEditing({ ...editing, contact_email: e.target.value })} placeholder="contact@client.com" />
                 </div>
                 <div>
@@ -185,37 +187,29 @@ export default function ClientsPage() {
                 <div>
                   <label className="block text-xs font-medium mb-1.5" style={{ color: "#A86035" }}>Font Family</label>
                   <select className="input" value={editing.font_family ?? "DM Sans"} onChange={e => setEditing({ ...editing, font_family: e.target.value })}>
-                    {["DM Sans", "Inter", "Poppins", "Roboto", "Playfair Display", "Lato", "Nunito"].map(f => <option key={f}>{f}</option>)}
+                    {["DM Sans","Inter","Poppins","Roboto","Playfair Display","Lato","Nunito"].map(f => <option key={f}>{f}</option>)}
                   </select>
                 </div>
               </div>
-
-              {/* Branding */}
               <div className="rounded-xl p-4 space-y-3" style={{ background: "#FAF4E8", border: "1px solid #EDD9B0" }}>
                 <p className="text-xs font-semibold" style={{ color: "#A86035" }}>PORTAL BRANDING</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#3D2314" }}>Primary Color</label>
-                    <div className="flex gap-2 items-center">
-                      <input type="color" value={editing.primary_color ?? "#2C1A0F"} onChange={e => setEditing({ ...editing, primary_color: e.target.value })}
-                        className="w-10 h-9 rounded-lg cursor-pointer border" style={{ borderColor: "#EDD9B0" }} />
-                      <input className="input flex-1" value={editing.primary_color ?? ""} onChange={e => setEditing({ ...editing, primary_color: e.target.value })} />
+                  {(["primary_color","accent_color"] as const).map(k => (
+                    <div key={k}>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#3D2314" }}>{k === "primary_color" ? "Primary" : "Accent"} Color</label>
+                      <div className="flex gap-2 items-center">
+                        <input type="color" value={editing[k] ?? "#000000"}
+                          onInput={(e) => setEditing({ ...editing, [k]: (e.target as HTMLInputElement).value })}
+                          style={{ width: 40, height: 36, borderRadius: 6, cursor: "pointer", border: "1px solid #EDD9B0", padding: 2 }} />
+                        <input className="input flex-1" value={editing[k] ?? ""} onChange={e => setEditing({ ...editing, [k]: e.target.value })} />
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#3D2314" }}>Accent Color</label>
-                    <div className="flex gap-2 items-center">
-                      <input type="color" value={editing.accent_color ?? "#A86035"} onChange={e => setEditing({ ...editing, accent_color: e.target.value })}
-                        className="w-10 h-9 rounded-lg cursor-pointer border" style={{ borderColor: "#EDD9B0" }} />
-                      <input className="input flex-1" value={editing.accent_color ?? ""} onChange={e => setEditing({ ...editing, accent_color: e.target.value })} />
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
-
               <div className="flex items-center gap-3">
                 <button onClick={() => setEditing({ ...editing, is_active: !editing.is_active })}
-                  className={`w-5 h-5 rounded flex items-center justify-center border transition-all`}
+                  className="w-5 h-5 rounded flex items-center justify-center border transition-all"
                   style={{ background: editing.is_active ? "#A86035" : "transparent", borderColor: "#A86035" }}>
                   {editing.is_active && <Check size={12} color="white" />}
                 </button>

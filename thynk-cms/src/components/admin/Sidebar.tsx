@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { LayoutDashboard, Users, Package, Link2, ClipboardList, Palette, Settings, LogOut, ChevronRight, Target, Clock } from "lucide-react";
+import { LayoutDashboard, Users, Package, Link2, ClipboardList, Palette, Settings, LogOut, ChevronRight, Target, Clock, Bell } from "lucide-react";
 
 const nav = [
   { label: "Dashboard",   href: "/admin/dashboard",   icon: LayoutDashboard },
@@ -13,6 +13,7 @@ const nav = [
   { label: "Leads",       href: "/admin/Leads",        icon: Target },
   { label: "Lead Aging",  href: "/admin/lead-aging",   icon: Clock },
   { label: "Users",       href: "/admin/users",        icon: Settings },
+  { label: "Notifications",href: "/admin/notifications",icon: Bell },
   { label: "Theme",       href: "/admin/theme",        icon: Palette },
 ];
 

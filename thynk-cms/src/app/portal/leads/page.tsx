@@ -34,9 +34,8 @@ export default function PortalLeadsPage() {
       const { data: profile } = await supabase
         .from("profiles").select("client_id, clients(accent_color,primary_color)").eq("id", user.id).single();
       if (!profile?.client_id) return;
-      const clientData = Array.isArray(profile.clients) ? profile.clients[0] : profile.clients as { accent_color?: string; primary_color?: string } | null;
-      if (clientData?.accent_color)  setAccent(clientData.accent_color);
-      if (clientData?.primary_color) setPrimary(clientData.primary_color);
+      if (profile.clients?.accent_color)  setAccent(profile.clients.accent_color);
+      if (profile.clients?.primary_color) setPrimary(profile.clients.primary_color);
       const { data } = await supabase
         .from("leads")
         .select("*, data_entries(period_start, period_end, entry_label)")
