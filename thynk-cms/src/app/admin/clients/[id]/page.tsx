@@ -96,37 +96,51 @@ export default function ClientDetailPage() {
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    let successCount = 0;
     for (const file of Array.from(files)) {
-      const ext  = file.name.split(".").pop();
-      const path = `${id}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
-      const { error: upErr } = await supabase.storage.from("client-documents").upload(path, file);
-      if (upErr) { toast.error(`Upload failed: ${file.name}`); continue; }
-      const { data: urlData } = supabase.storage.from("client-documents").getPublicUrl(path);
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("client_documents").insert({
-        client_id:   id,
-        uploaded_by: user?.id,
-        file_name:   file.name,
-        file_path:   path,
-        file_url:    urlData.publicUrl,
-        file_type:   file.type || "application/octet-stream",
-        file_size:   file.size,
-        category:    docCategory,
-        description: docDesc || null,
-      });
-      // Auto-notify client
-      await supabase.from("notifications").insert({
-        client_id: id,
-        type:      "document",
-        title:     `New document: ${file.name}`,
-        body:      docDesc || `A new file has been uploaded in the ${docCategory} category.`,
-        metadata:  { file_name: file.name, category: docCategory },
-        created_by: user?.id,
-      });
+      try {
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${id}/${Date.now()}-${safeName}`;
+        const { error: upErr } = await supabase.storage
+          .from("client-documents")
+          .upload(path, file, { cacheControl: "3600", upsert: false });
+        if (upErr) {
+          console.error("Storage upload error:", upErr);
+          toast.error(`Upload failed for "${file.name}": ${upErr.message}. Make sure the "client-documents" bucket exists in Supabase Storage and is set to Public.`);
+          continue;
+        }
+        const { data: urlData } = supabase.storage.from("client-documents").getPublicUrl(path);
+        const { error: dbErr } = await supabase.from("client_documents").insert({
+          client_id:   id,
+          uploaded_by: user?.id,
+          file_name:   file.name,
+          file_path:   path,
+          file_url:    urlData.publicUrl,
+          file_type:   file.type || "application/octet-stream",
+          file_size:   file.size,
+          category:    docCategory,
+          description: docDesc || null,
+        });
+        if (dbErr) { toast.error(`DB error: ${dbErr.message}`); continue; }
+        // Auto-notify client
+        await supabase.from("notifications").insert({
+          client_id:  id,
+          type:       "document",
+          title:      `📎 New document shared: ${file.name}`,
+          body:       docDesc || `A new ${docCategory} document has been shared with you.`,
+          metadata:   { file_name: file.name, category: docCategory },
+          created_by: user?.id,
+        });
+        successCount++;
+      } catch (err: any) {
+        toast.error(`Error uploading "${file.name}": ${err?.message ?? "Unknown error"}`);
+      }
     }
-    toast.success("Files uploaded successfully");
+    if (successCount > 0) toast.success(`${successCount} file${successCount > 1 ? "s" : ""} uploaded successfully`);
     setDocDesc("");
     setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     loadAll();
   }
 

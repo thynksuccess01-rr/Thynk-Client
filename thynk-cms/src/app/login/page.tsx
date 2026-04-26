@@ -1,12 +1,27 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [logo,     setLogo]     = useState("");
+  const [brand,    setBrand]    = useState("Thynk CMS");
+  const [tagline,  setTagline]  = useState("Client Management Platform");
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.from("theme_config").select("key,value").in("key", ["logo_url","brand_name","brand_tagline"]).then(({ data }) => {
+      if (!data) return;
+      data.forEach((r: any) => {
+        if (r.key === "logo_url"      && r.value) setLogo(r.value);
+        if (r.key === "brand_name"    && r.value) setBrand(r.value);
+        if (r.key === "brand_tagline" && r.value) setTagline(r.value);
+      });
+    });
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -24,19 +39,27 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", background: "#F5F4F0" }}>
+      {/* Left panel */}
       <div style={{ width: 420, background: "#1C1917", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "48px 40px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 8, background: "#E8611A", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: "white", fontWeight: 700, fontSize: 16, fontFamily: "Georgia, serif" }}>T</span>
-          </div>
-          <span style={{ color: "#F5F4F0", fontWeight: 600, fontSize: 15 }}>Thynk CMS</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {logo ? (
+            <img src={logo} alt={brand} style={{ height: 36, objectFit: "contain", maxWidth: 160 }} />
+          ) : (
+            <>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: "#E8611A", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ color: "white", fontWeight: 700, fontSize: 16, fontFamily: "Georgia, serif" }}>T</span>
+              </div>
+              <span style={{ color: "#F5F4F0", fontWeight: 600, fontSize: 15 }}>{brand}</span>
+            </>
+          )}
         </div>
         <div>
           <p style={{ fontSize: 28, fontWeight: 500, color: "#F5F4F0", fontFamily: "Fraunces, Georgia, serif", lineHeight: 1.3, marginBottom: 14 }}>Your agency.<br />Organised.</p>
-          <p style={{ fontSize: 13.5, color: "#78716C", lineHeight: 1.7 }}>Manage clients, campaigns, leads, and reports — all in one place.</p>
+          <p style={{ fontSize: 13.5, color: "#78716C", lineHeight: 1.7 }}>{tagline}</p>
         </div>
         <p style={{ fontSize: 12, color: "#4E4945" }}>© {new Date().getFullYear()} Thynk Success</p>
       </div>
+      {/* Right panel */}
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
         <div style={{ width: "100%", maxWidth: 360 }}>
           <h2 style={{ fontSize: 22, fontWeight: 600, color: "#1C1917", marginBottom: 6, fontFamily: "Fraunces, Georgia, serif" }}>Sign in</h2>

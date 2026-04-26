@@ -84,7 +84,7 @@ export default function AdminDashboard() {
     const [e, u, l] = await Promise.all([
       base(supabase.from("data_entries").select("*").gte("period_start", s)).order("period_start"),
       base(supabase.from("campaign_updates").select("*").gte("update_date", s)).order("update_date"),
-      base(supabase.from("leads").select("*, data_entries(period_start,period_end,entry_label)")).order("created_at", { ascending: false }),
+      base(supabase.from("leads").select("*, data_entries(period_start,period_end,entry_label), clients(name)")).order("created_at", { ascending: false }),
     ]);
     setEntries(e.data ?? []); setUpdates(u.data ?? []); setLeads(l.data ?? []);
   }, [sel, timeline]);
@@ -148,11 +148,7 @@ export default function AdminDashboard() {
 
   const clientRevData = clients.slice(0, 6).map((c) => {
     const cEntries = entries.filter((e) => e.client_id === c.id);
-    const cLeads = leads.filter((l) => l.client_id === c.id);
-    // Use lead-level revenue_collected if available, fallback to entry total
-    const leadRev = cLeads.reduce((s, l) => s + (l.revenue_collected ?? 0), 0);
-    const entryRev = cEntries.reduce((s, e) => s + (e.total_revenue_collected ?? 0), 0);
-    return { name: c.name.split(" ")[0], Revenue: leadRev > 0 ? leadRev : entryRev, Leads: cLeads.length };
+    return { name: c.name.split(" ")[0], Revenue: cEntries.reduce((s, e) => s + (e.total_revenue_collected ?? 0), 0), Leads: leads.filter((l) => l.client_id === c.id).length };
   }).filter((d) => d.Revenue > 0 || d.Leads > 0).sort((a, b) => b.Revenue - a.Revenue);
 
   const Card = ({ icon, label, value, sub, color }: any) => (
@@ -372,7 +368,7 @@ export default function AdminDashboard() {
             {leads.length === 0 ? <p style={{ fontSize: 13, color: "#A8A29E", textAlign: "center", padding: "24px 0" }}>No leads yet</p> : (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead><tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
-                  {["Lead", "Period Generated", "Status", "Location", "Revenue", "Cycle", "Change"].map((h) => (
+                  {["Lead", "Client", "Period Generated", "Status", "Location", "Revenue", "Cycle", "Change"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11.5, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
                   ))}
                 </tr></thead>
@@ -384,6 +380,7 @@ export default function AdminDashboard() {
                         <td style={{ padding: "10px 12px", fontWeight: 600, color: "#1C1917" }}>
                           {l.name}{l.is_updated_this_cycle && <span style={{ marginLeft: 5, fontSize: 10, background: "#FEF3C7", color: "#92400E", padding: "1px 6px", borderRadius: 8, fontWeight: 700 }}>↑</span>}
                         </td>
+                        <td style={{ padding: "10px 12px", fontSize: 12.5, color: "#57534E" }}>{(l as any).clients?.name ?? "—"}</td>
                         <td style={{ padding: "10px 12px", fontSize: 12 }}>
                           {entry ? (
                             <span style={{ background: "#EEF2FF", color: "#4338CA", padding: "2px 7px", borderRadius: 6, fontSize: 11.5, fontWeight: 500 }}>

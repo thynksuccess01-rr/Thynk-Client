@@ -42,28 +42,37 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       if (!profile?.clients) return;
       const c = profile.clients;
       setClient(c);
-      setClientId(profile.client_id);
 
       // Apply branding
       document.documentElement.style.setProperty("--portal-primary", c.primary_color);
       document.documentElement.style.setProperty("--portal-accent", c.accent_color);
       document.body.style.fontFamily = `'${c.font_family ?? "DM Sans"}', sans-serif`;
 
-      // Track login
-      await supabase.from("portal_login_history").insert({
-        client_id:   profile.client_id,
-        user_id:     u.id,
-        email:       u.email,
-        user_agent:  navigator.userAgent,
-      });
+      const cid = profile.client_id;
+      setClientId(cid);
 
-      // Load notifications
-      loadNotifications(profile.client_id);
+      // Track login (non-blocking)
+      supabase.from("portal_login_history").insert({
+        client_id:  cid,
+        user_id:    u.id,
+        email:      u.email,
+        user_agent: navigator.userAgent,
+      }).then(() => {});
+
+      // Load notifications immediately with the clientId we have
+      const { data: notifData } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("client_id", cid)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      setNotifications(notifData ?? []);
     }
     load();
   }, []);
 
   async function loadNotifications(cid: string) {
+    if (!cid) return;
     const { data } = await supabase
       .from("notifications")
       .select("*")
@@ -86,8 +95,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
   async function markAllRead() {
     if (!clientId) return;
-    await supabase.from("notifications").update({ is_read: true }).eq("client_id", clientId).eq("is_read", false);
-    loadNotifications(clientId!);
+    await supabase.from("notifications").update({ is_read: true })
+      .eq("client_id", clientId).eq("is_read", false);
+    loadNotifications(clientId);
   }
 
   async function logout() {
