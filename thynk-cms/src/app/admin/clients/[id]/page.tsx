@@ -96,6 +96,10 @@ export default function ClientDetailPage() {
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
+    // Ensure storage bucket exists (creates it if missing)
+    try {
+      await fetch("/api/admin/ensure-bucket", { method: "POST" });
+    } catch (_) { /* non-fatal */ }
     const { data: { user } } = await supabase.auth.getUser();
     let successCount = 0;
     for (const file of Array.from(files)) {
@@ -107,7 +111,7 @@ export default function ClientDetailPage() {
           .upload(path, file, { cacheControl: "3600", upsert: false });
         if (upErr) {
           console.error("Storage upload error:", upErr);
-          toast.error(`Upload failed for "${file.name}": ${upErr.message}. Make sure the "client-documents" bucket exists in Supabase Storage and is set to Public.`);
+          toast.error(`Upload failed for "${file.name}": ${upErr.message}`);
           continue;
         }
         const { data: urlData } = supabase.storage.from("client-documents").getPublicUrl(path);

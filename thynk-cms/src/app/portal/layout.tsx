@@ -95,9 +95,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
   async function markAllRead() {
     if (!clientId) return;
-    await supabase.from("notifications").update({ is_read: true })
-      .eq("client_id", clientId).eq("is_read", false);
-    loadNotifications(clientId);
+    // Update local state immediately so badge disappears at once
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    // Then persist to DB
+    await supabase.from("notifications")
+      .update({ is_read: true })
+      .eq("client_id", clientId)
+      .eq("is_read", false);
   }
 
   async function logout() {
@@ -170,7 +174,20 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Top bar with notification bell */}
         <div style={{ padding: "14px 32px", borderBottom: "1px solid #E7E5E4", background: "#fff", display: "flex", alignItems: "center", justifyContent: "flex-end", position: "sticky", top: 0, zIndex: 20 }}>
           <div ref={notifRef} style={{ position: "relative" }}>
-            <button onClick={() => setShowNotifs(!showNotifs)}
+            <button onClick={() => {
+                const next = !showNotifs;
+                setShowNotifs(next);
+                // Auto-mark all as read when opening the panel
+                if (next && clientId && notifications.some(n => !n.is_read)) {
+                  supabase.from("notifications")
+                    .update({ is_read: true })
+                    .eq("client_id", clientId)
+                    .eq("is_read", false)
+                    .then(() => {
+                      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+                    });
+                }
+              }}
               style={{ position: "relative", background: "transparent", border: "1px solid #E7E5E4", borderRadius: 10, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#1C1917", fontFamily: "inherit" }}>
               <Bell size={16} />
               {unread > 0 && (
