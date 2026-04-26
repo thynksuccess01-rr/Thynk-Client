@@ -39,7 +39,8 @@ export default function PortalDocumentsPage() {
       if (!user) return;
       const { data: p } = await supabase.from("profiles").select("client_id, clients(accent_color)").eq("id", user.id).single();
       if (!p?.client_id) return;
-      if (p.clients?.accent_color) setAccent(p.clients.accent_color);
+      const clientData = p.clients as any;
+      if (clientData?.accent_color) setAccent(clientData.accent_color);
       const { data } = await supabase.from("client_documents")
         .select("*").eq("client_id", p.client_id).order("created_at", { ascending: false });
       setDocs(data ?? []);

@@ -94,7 +94,7 @@ export default function NotificationControlPanel() {
   const filtered = notifications.filter(n => {
     if (search) {
       const q = search.toLowerCase();
-      return n.title.toLowerCase().includes(q) || (n.body??"").toLowerCase().includes(q) || (n.clients?.name??"").toLowerCase().includes(q);
+      return n.title.toLowerCase().includes(q) || (n.body??"").toLowerCase().includes(q) || ((n as any).clients?.name??"").toLowerCase().includes(q);
     }
     return true;
   });
@@ -218,7 +218,7 @@ export default function NotificationControlPanel() {
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
                         <p style={{fontSize:12.5,fontWeight:600,color:"#1C1917"}}>{n.title}</p>
                         <span style={{fontSize:10,padding:"1px 5px",borderRadius:5,background:meta.bg,color:meta.color,fontWeight:600}}>{n.type.replace(/_/g," ")}</span>
-                        <span style={{fontSize:11,color:"#A8A29E",background:"#F5F4F0",padding:"1px 6px",borderRadius:5}}>{n.clients?.name||"—"}</span>
+                        <span style={{fontSize:11,color:"#A8A29E",background:"#F5F4F0",padding:"1px 6px",borderRadius:5}}>{(n as any).clients?.name||"—"}</span>
                         {!n.is_read&&<span style={{width:6,height:6,borderRadius:"50%",background:"#F59E0B",display:"inline-block"}}/>}
                       </div>
                       {n.body&&<p style={{fontSize:12,color:"#78716C",lineHeight:1.5}}>{n.body}</p>}

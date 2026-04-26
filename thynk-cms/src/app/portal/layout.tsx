@@ -37,7 +37,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       const { data: { user: u } } = await supabase.auth.getUser();
       if (!u) return;
       setUser(u);
-      const { data: profile } = await supabase.from("profiles").select("*,clients(*)").eq("id", u.id).single();
+      const { data: profileRaw } = await supabase.from("profiles").select("*,clients(*)").eq("id", u.id).single();
+      const profile = profileRaw as any;
       if (!profile?.clients) return;
       const c = profile.clients;
       setClient(c);
