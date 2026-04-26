@@ -131,7 +131,7 @@ export default function AdminLeadsPage() {
       if (!l.name.toLowerCase().includes(q) &&
           !(l.location??"").toLowerCase().includes(q) &&
           !(l.contact_person??"").toLowerCase().includes(q) &&
-          !(l.clients?.name??"").toLowerCase().includes(q)) return false;
+          !((l as any).clients?.name??"").toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -235,7 +235,7 @@ export default function AdminLeadsPage() {
                         {l.is_updated_this_cycle&&<span style={{marginLeft:5,fontSize:10,background:"#FEF3C7",color:"#92400E",padding:"1px 6px",borderRadius:8,fontWeight:700}}>↑</span>}
                         {(l.country||l.state)&&<p style={{fontSize:11,color:"#A8A29E",fontWeight:400,marginTop:1}}>{[l.country,l.state].filter(Boolean).join(", ")}</p>}
                       </td>
-                      <td style={{padding:"10px 12px",color:"#57534E",fontSize:12.5}}>{l.clients?.name??"—"}</td>
+                      <td style={{padding:"10px 12px",color:"#57534E",fontSize:12.5}}>{(l as any).clients?.name??"—"}</td>
                       <td style={{padding:"10px 12px",fontSize:12,color:"#78716C"}}>
                         {l.contact_person && <p style={{fontWeight:500,color:"#1C1917"}}>{l.contact_person}</p>}
                         {l.contact_email  && <p style={{fontSize:11}}>{l.contact_email}</p>}

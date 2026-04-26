@@ -31,8 +31,9 @@ export default function PortalLeadsPage() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: profile } = await supabase
+      const { data: profileRaw } = await supabase
         .from("profiles").select("client_id, clients(accent_color,primary_color)").eq("id", user.id).single();
+      const profile = profileRaw as any;
       if (!profile?.client_id) return;
       if (profile.clients?.accent_color)  setAccent(profile.clients.accent_color);
       if (profile.clients?.primary_color) setPrimary(profile.clients.primary_color);

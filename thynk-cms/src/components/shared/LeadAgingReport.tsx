@@ -85,7 +85,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
     const rows = [
       ["Lead","Status",isAdmin?"Client":"","Country","State","Location","Contact Person","Contact Email","Contact Phone","Expected Revenue","Revenue Collected","Period","Cycle","Days Since Update","Previous Status"],
       ...filtered.map(l=>[
-        l.name,l.status,isAdmin?l.clients?.name||"":"",
+        l.name,l.status,isAdmin?(l as any).clients?.name||"":"",
         l.country||"",l.state||"",l.location||"",
         l.contact_person||"",l.contact_email||"",l.contact_phone||"",
         l.expected_revenue||0,l.revenue_collected||0,
@@ -203,7 +203,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
                         {(l.country||l.state)&&<p style={{fontSize:11,color:"#A8A29E",marginTop:1}}>{[l.country,l.state].filter(Boolean).join(", ")}</p>}
                         {l.is_updated_this_cycle&&<span style={{fontSize:10,background:"#FEF3C7",color:"#92400E",padding:"1px 5px",borderRadius:6,fontWeight:700}}>UPDATED</span>}
                       </td>
-                      {isAdmin&&<td style={{padding:"11px 12px",color:"#78716C",fontSize:12}}>{l.clients?.name||"—"}</td>}
+                      {isAdmin&&<td style={{padding:"11px 12px",color:"#78716C",fontSize:12}}>{(l as any).clients?.name||"—"}</td>}
                       <td style={{padding:"11px 12px"}}>
                         <span style={{fontSize:11.5,padding:"3px 9px",borderRadius:10,fontWeight:600,background:sc.bg,color:sc.text}}>{l.status.charAt(0).toUpperCase()+l.status.slice(1)}</span>
                       </td>
@@ -282,7 +282,7 @@ function PeriodGroup({title,subtitle,leads,isAdmin}:{title:string,subtitle?:stri
                     {l.name}
                     {(l.country||l.state)&&<span style={{fontSize:11,color:"#A8A29E",fontWeight:400,marginLeft:5}}>{[l.country,l.state].filter(Boolean).join(", ")}</span>}
                   </td>
-                  {isAdmin&&<td style={{padding:"9px 12px",color:"#78716C",fontSize:12}}>{l.clients?.name||"—"}</td>}
+                  {isAdmin&&<td style={{padding:"9px 12px",color:"#78716C",fontSize:12}}>{(l as any).clients?.name||"—"}</td>}
                   <td style={{padding:"9px 12px"}}><span style={{fontSize:11.5,padding:"2px 8px",borderRadius:8,fontWeight:600,background:sc.bg,color:sc.text}}>{l.status.charAt(0).toUpperCase()+l.status.slice(1)}</span></td>
                   <td style={{padding:"9px 12px",color:"#78716C",fontSize:12}}>{[l.country,l.state,l.location].filter(Boolean).join(", ")||"—"}</td>
                   <td style={{padding:"9px 12px",fontSize:12}}>

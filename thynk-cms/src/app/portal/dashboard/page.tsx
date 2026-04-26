@@ -71,7 +71,8 @@ export default function PortalDashboard() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: p } = await supabase.from("profiles").select("client_id,clients(*)").eq("id", user.id).single();
+      const { data: pRaw } = await supabase.from("profiles").select("client_id,clients(*)").eq("id", user.id).single();
+      const p = pRaw as any;
       if (!p?.client_id) return;
       setClientId(p.client_id);
       setClientData(p.clients);
