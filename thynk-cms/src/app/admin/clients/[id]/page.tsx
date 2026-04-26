@@ -115,27 +115,24 @@ export default function ClientDetailPage() {
           continue;
         }
         const { data: urlData } = supabase.storage.from("client-documents").getPublicUrl(path);
-        const { error: dbErr } = await supabase.from("client_documents").insert({
-          client_id:   id,
-          uploaded_by: user?.id,
-          file_name:   file.name,
-          file_path:   path,
-          file_url:    urlData.publicUrl,
-          file_type:   file.type || "application/octet-stream",
-          file_size:   file.size,
-          category:    docCategory,
-          description: docDesc || null,
+        // Use server-side API route to insert (bypasses RLS, uses service role key)
+        const apiRes = await fetch("/api/admin/upload-document", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId:    id,
+            uploadedBy:  user?.id,
+            fileName:    file.name,
+            filePath:    path,
+            fileUrl:     urlData.publicUrl,
+            fileType:    file.type || "application/octet-stream",
+            fileSize:    file.size,
+            category:    docCategory,
+            description: docDesc || null,
+          }),
         });
-        if (dbErr) { toast.error(`DB error: ${dbErr.message}`); continue; }
-        // Auto-notify client
-        await supabase.from("notifications").insert({
-          client_id:  id,
-          type:       "document",
-          title:      `📎 New document shared: ${file.name}`,
-          body:       docDesc || `A new ${docCategory} document has been shared with you.`,
-          metadata:   { file_name: file.name, category: docCategory },
-          created_by: user?.id,
-        });
+        const apiJson = await apiRes.json();
+        if (!apiRes.ok) { toast.error(`DB error: ${apiJson.error}`); continue; }
         successCount++;
       } catch (err: any) {
         toast.error(`Error uploading "${file.name}": ${err?.message ?? "Unknown error"}`);
