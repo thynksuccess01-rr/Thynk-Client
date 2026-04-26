@@ -71,6 +71,7 @@ interface Lead {
   expected_volume?: number | null;
   expected_revenue?: number | null;
   revenue_collected?: number | null;
+  total_licences_allocated?: number | null;
   status: LeadStatus;
   notes?: string;
   cycle_label?: string;
@@ -388,20 +389,36 @@ export default function DataPanelPage() {
       return;
     }
     setSaving(true);
+
+    // Always recompute totals from campaign_updates so dashboards stay in sync
+    const entryId = activeEntry && activeEntry !== "new" ? activeEntry : null;
+    let upds: any[] = updates;
+    if (entryId && updates.length === 0) {
+      // Re-fetch in case updates state is stale
+      const { data: freshUpds } = await supabase
+        .from("campaign_updates").select("*").eq("data_entry_id", entryId);
+      upds = freshUpds ?? [];
+    }
+    const emailUpds   = upds.filter((u: any) => u.channel === "email");
+    const waUpds      = upds.filter((u: any) => u.channel === "whatsapp");
+    const callUpds    = upds.filter((u: any) => u.channel === "calls");
+
     const payload = {
       ...form,
       client_id: selectedClient,
       updated_at: new Date().toISOString(),
-      email_sent: 0,
-      email_opened: 0,
-      email_clicked: 0,
-      whatsapp_sent: 0,
-      whatsapp_delivered: 0,
-      whatsapp_replied: 0,
-      calls_made: 0,
-      calls_connected: 0,
-      calls_converted: 0,
+      // Sum all campaign_updates rows into data_entries so every dashboard reads correct totals
+      email_sent:          emailUpds.reduce((s: number, u: any) => s + (u.email_sent        ?? 0), 0),
+      email_opened:        emailUpds.reduce((s: number, u: any) => s + (u.email_opened      ?? 0), 0),
+      email_clicked:       emailUpds.reduce((s: number, u: any) => s + (u.email_clicked     ?? 0), 0),
+      whatsapp_sent:       waUpds.reduce(   (s: number, u: any) => s + (u.whatsapp_sent     ?? 0), 0),
+      whatsapp_delivered:  waUpds.reduce(   (s: number, u: any) => s + (u.whatsapp_delivered?? 0), 0),
+      whatsapp_replied:    waUpds.reduce(   (s: number, u: any) => s + (u.whatsapp_replied  ?? 0), 0),
+      calls_made:          callUpds.reduce( (s: number, u: any) => s + (u.calls_made        ?? 0), 0),
+      calls_connected:     callUpds.reduce( (s: number, u: any) => s + (u.calls_connected   ?? 0), 0),
+      calls_converted:     callUpds.reduce( (s: number, u: any) => s + (u.calls_converted   ?? 0), 0),
     };
+
     if (activeEntry && activeEntry !== "new") {
       const { error } = await supabase.from("data_entries").update(payload).eq("id", activeEntry);
       if (error) toast.error(error.message);
@@ -462,17 +479,57 @@ export default function DataPanelPage() {
       client_id: selectedClient,
       created_at: new Date().toISOString(),
     });
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Entry added");
-      setNewUpdate(createEmptyUpdate());
-      setShowUpdateForm(false);
-      loadUpdates();
-    }
+    if (error) { toast.error(error.message); return; }
+
+    // Immediately resync data_entry totals from all campaign_updates
+    const { data: allUpds } = await supabase
+      .from("campaign_updates").select("*").eq("data_entry_id", activeEntry);
+    const eu = (allUpds ?? []).filter((u: any) => u.channel === "email");
+    const wu = (allUpds ?? []).filter((u: any) => u.channel === "whatsapp");
+    const cu = (allUpds ?? []).filter((u: any) => u.channel === "calls");
+    await supabase.from("data_entries").update({
+      email_sent:         eu.reduce((s: number, u: any) => s + (u.email_sent         ?? 0), 0),
+      email_opened:       eu.reduce((s: number, u: any) => s + (u.email_opened       ?? 0), 0),
+      email_clicked:      eu.reduce((s: number, u: any) => s + (u.email_clicked      ?? 0), 0),
+      whatsapp_sent:      wu.reduce((s: number, u: any) => s + (u.whatsapp_sent      ?? 0), 0),
+      whatsapp_delivered: wu.reduce((s: number, u: any) => s + (u.whatsapp_delivered ?? 0), 0),
+      whatsapp_replied:   wu.reduce((s: number, u: any) => s + (u.whatsapp_replied   ?? 0), 0),
+      calls_made:         cu.reduce((s: number, u: any) => s + (u.calls_made         ?? 0), 0),
+      calls_connected:    cu.reduce((s: number, u: any) => s + (u.calls_connected    ?? 0), 0),
+      calls_converted:    cu.reduce((s: number, u: any) => s + (u.calls_converted    ?? 0), 0),
+      updated_at: new Date().toISOString(),
+    }).eq("id", activeEntry);
+
+    toast.success("Entry added");
+    setNewUpdate(createEmptyUpdate());
+    setShowUpdateForm(false);
+    loadUpdates();
+    loadEntries(); // refresh sidebar totals
   }
 
   async function deleteUpdate(id: string) {
     await supabase.from("campaign_updates").delete().eq("id", id);
+    // Resync data_entry totals after deletion
+    if (activeEntry && activeEntry !== "new") {
+      const { data: allUpds } = await supabase
+        .from("campaign_updates").select("*").eq("data_entry_id", activeEntry);
+      const eu = (allUpds ?? []).filter((u: any) => u.channel === "email");
+      const wu = (allUpds ?? []).filter((u: any) => u.channel === "whatsapp");
+      const cu = (allUpds ?? []).filter((u: any) => u.channel === "calls");
+      await supabase.from("data_entries").update({
+        email_sent:         eu.reduce((s: number, u: any) => s + (u.email_sent         ?? 0), 0),
+        email_opened:       eu.reduce((s: number, u: any) => s + (u.email_opened       ?? 0), 0),
+        email_clicked:      eu.reduce((s: number, u: any) => s + (u.email_clicked      ?? 0), 0),
+        whatsapp_sent:      wu.reduce((s: number, u: any) => s + (u.whatsapp_sent      ?? 0), 0),
+        whatsapp_delivered: wu.reduce((s: number, u: any) => s + (u.whatsapp_delivered ?? 0), 0),
+        whatsapp_replied:   wu.reduce((s: number, u: any) => s + (u.whatsapp_replied   ?? 0), 0),
+        calls_made:         cu.reduce((s: number, u: any) => s + (u.calls_made         ?? 0), 0),
+        calls_connected:    cu.reduce((s: number, u: any) => s + (u.calls_connected    ?? 0), 0),
+        calls_converted:    cu.reduce((s: number, u: any) => s + (u.calls_converted    ?? 0), 0),
+        updated_at: new Date().toISOString(),
+      }).eq("id", activeEntry);
+      loadEntries();
+    }
     toast.success("Deleted");
     loadUpdates();
   }
@@ -674,49 +731,63 @@ export default function DataPanelPage() {
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {/* ── Totals summary row ── */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
                   <NumField
                     label="Total Licences"
                     fieldKey="total_licences"
                     form={form}
                     onChange={(k, v) => handleEntryFormChange(k, v)}
                   />
-
-                  {/* Revenue Collected — via Lead Revenue Picker */}
                   <div>
-                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
-                      Revenue Collected (₹)
-                    </label>
-                    <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
-                      <div style={{ flex: 1, background: "#F9F8F7", border: "1px solid #E7E5E4", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 700, color: "#16A34A", display: "flex", alignItems: "center" }}>
-                        ₹{(form.total_revenue_collected ?? 0).toLocaleString("en-IN")}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={openRevenueModal}
-                        style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 12px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
-                      >
-                        ₹ Set via Leads
-                      </button>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Revenue Collected (₹)</label>
+                    <div style={{ background: "#F0FDF4", border: "1px solid #A7F3D0", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 800, color: "#16A34A" }}>
+                      ₹{(form.total_revenue_collected ?? 0).toLocaleString("en-IN")}
                     </div>
-                    <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 4 }}>
-                      Auto-summed from lead revenue entries
-                    </p>
+                    <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 3 }}>Summed from lead entries below</p>
                   </div>
-
-                  {/* Expected Collection — auto-computed */}
                   <div>
-                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
-                      Expected Collection (₹)
-                    </label>
-                    <div style={{ background: "#F9F8F7", border: "1px solid #E7E5E4", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 700, color: "#D97706" }}>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Expected Collection (₹)</label>
+                    <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 800, color: "#D97706" }}>
                       ₹{(form.expected_collection ?? 0).toLocaleString("en-IN")}
                     </div>
-                    <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 4 }}>
-                      Auto-summed from lead expected revenue
-                    </p>
+                    <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 3 }}>Summed from lead expected values</p>
                   </div>
                 </div>
+
+                {/* ── Inline Lead Revenue Table ── */}
+                <LeadRevenueTable
+                  leads={leads}
+                  activeEntry={activeEntry}
+                  onSave={async (edits: Record<string, { licences: string; revenue: string; expected: string }>) => {
+                    if (!activeEntry || activeEntry === "new") { toast.error("Save the period first"); return; }
+                    // Write each lead's values
+                    for (const [id, vals] of Object.entries(edits)) {
+                      await supabase.from("leads").update({
+                        total_licences_allocated: vals.licences ? Number(vals.licences) : null,
+                        revenue_collected:         vals.revenue  ? Number(vals.revenue)  : 0,
+                        expected_revenue:          vals.expected ? Number(vals.expected) : null,
+                        updated_at: new Date().toISOString(),
+                      }).eq("id", id);
+                    }
+                    // Recompute period totals
+                    const { data: allLeads } = await supabase
+                      .from("leads").select("revenue_collected, expected_revenue, status").eq("client_id", selectedClient);
+                    const totalRev  = (allLeads ?? []).reduce((s: number, l: any) => s + (l.revenue_collected ?? 0), 0);
+                    const totalExp  = (allLeads ?? []).filter((l: any) => l.status !== "lost").reduce((s: number, l: any) => s + (l.expected_revenue ?? 0), 0);
+                    const totalLic  = Object.values(edits).reduce((s, v) => s + (Number(v.licences) || 0), 0);
+                    await supabase.from("data_entries").update({
+                      total_revenue_collected: totalRev,
+                      expected_collection:     totalExp,
+                      total_licences:          totalLic || form.total_licences,
+                      updated_at: new Date().toISOString(),
+                    }).eq("id", activeEntry);
+                    setForm(prev => ({ ...prev, total_revenue_collected: totalRev, expected_collection: totalExp }));
+                    toast.success("Revenue & licences saved");
+                    loadLeads();
+                    loadEntries();
+                  }}
+                />
               </Section>
 
               {/* Section Notes: Campaign Notes */}
@@ -954,6 +1025,159 @@ export default function DataPanelPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Lead Revenue Table ──────────────────────────────────────────────────────────
+
+interface LeadRevenueTableProps {
+  leads: Lead[];
+  activeEntry: string | null;
+  onSave: (edits: Record<string, { licences: string; revenue: string; expected: string }>) => Promise<void>;
+}
+
+function LeadRevenueTable({ leads, activeEntry, onSave }: LeadRevenueTableProps) {
+  const [edits, setEdits] = useState<Record<string, { licences: string; revenue: string; expected: string }>>({});
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // Reset edits when leads change
+  useEffect(() => {
+    const init: Record<string, { licences: string; revenue: string; expected: string }> = {};
+    leads.forEach(l => {
+      init[l.id] = {
+        licences: l.total_licences_allocated != null ? String(l.total_licences_allocated) : "",
+        revenue:  l.revenue_collected != null && l.revenue_collected > 0 ? String(l.revenue_collected) : "",
+        expected: l.expected_revenue  != null ? String(l.expected_revenue)  : "",
+      };
+    });
+    setEdits(init);
+  }, [leads]);
+
+  const filtered = leads.filter(l => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return l.name.toLowerCase().includes(q) || (l.location ?? "").toLowerCase().includes(q) || (l.status ?? "").toLowerCase().includes(q);
+  });
+
+  const totalRevenue  = Object.values(edits).reduce((s, v) => s + (Number(v.revenue)  || 0), 0);
+  const totalExpected = Object.values(edits).reduce((s, v) => s + (Number(v.expected) || 0), 0);
+  const totalLicences = Object.values(edits).reduce((s, v) => s + (Number(v.licences) || 0), 0);
+
+  const STATUS_DOT: Record<string, string> = { new:"#6366F1", contacted:"#F59E0B", qualified:"#F97316", proposal:"#8B5CF6", negotiation:"#F59E0B", won:"#16A34A", lost:"#EF4444" };
+
+  async function handleSave() {
+    setSaving(true);
+    await onSave(edits);
+    setSaving(false);
+  }
+
+  if (leads.length === 0) return (
+    <div style={{ background: "#FAFAF9", border: "1px dashed #E7E5E4", borderRadius: 10, padding: "20px 0", textAlign: "center", color: "#A8A29E", fontSize: 13 }}>
+      Add leads below to set revenue per lead
+    </div>
+  );
+
+  return (
+    <div style={{ border: "1px solid #E7E5E4", borderRadius: 10, overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ background: "#F9F8F7", padding: "12px 16px", borderBottom: "1px solid #F0EEEC", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>💰 Revenue & Licences per Lead</p>
+          <p style={{ fontSize: 11.5, color: "#78716C", marginTop: 2 }}>Select leads and enter revenue collected, expected, and licences. Totals update the period automatically.</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Live totals */}
+          <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#78716C" }}>
+            <span>🏦 <strong style={{ color: "#16A34A" }}>₹{totalRevenue.toLocaleString("en-IN")}</strong> collected</span>
+            <span>🔮 <strong style={{ color: "#D97706" }}>₹{totalExpected.toLocaleString("en-IN")}</strong> expected</span>
+            <span>📦 <strong style={{ color: "#0891B2" }}>{totalLicences.toLocaleString("en-IN")}</strong> licences</span>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving || !activeEntry || activeEntry === "new"}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.7 : 1, whiteSpace: "nowrap" }}>
+            <Save size={13} /> {saving ? "Saving..." : "Save All"}
+          </button>
+        </div>
+      </div>
+
+      {/* Search */}
+      {leads.length > 5 && (
+        <div style={{ padding: "8px 16px", borderBottom: "1px solid #F5F4F0", background: "#fff" }}>
+          <div style={{ position: "relative" }}>
+            <Search size={13} style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#A8A29E" }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leads..."
+              style={{ width: "100%", paddingLeft: 28, padding: "6px 10px 6px 28px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 12.5, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
+              {["Lead", "Status", "Location", "Licences", "Revenue Collected (₹)", "Expected Revenue (₹)"].map(h => (
+                <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11, fontWeight: 700, color: "#A8A29E", whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(lead => {
+              const e = edits[lead.id] ?? { licences: "", revenue: "", expected: "" };
+              const hasRevenue = Number(e.revenue) > 0;
+              const sc = STATUS_DOT[lead.status] ?? "#A8A29E";
+              return (
+                <tr key={lead.id} style={{ borderBottom: "1px solid #F5F4F0", background: hasRevenue ? "#F0FDF4" : "transparent", transition: "background 0.1s" }}>
+                  <td style={{ padding: "10px 12px" }}>
+                    <p style={{ fontWeight: 600, color: "#1C1917" }}>{lead.name}</p>
+                    {(lead.country || lead.state) && <p style={{ fontSize: 11, color: "#A8A29E", marginTop: 1 }}>{[lead.country, lead.state].filter(Boolean).join(", ")}</p>}
+                  </td>
+                  <td style={{ padding: "10px 12px" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc, display: "inline-block" }} />
+                      {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                    </span>
+                  </td>
+                  <td style={{ padding: "10px 12px", color: "#78716C", fontSize: 12.5 }}>{lead.location || "—"}</td>
+                  <td style={{ padding: "10px 12px" }}>
+                    <input type="number" min="0" value={e.licences} placeholder="0"
+                      onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], licences: ev.target.value } }))}
+                      style={{ width: 90, padding: "6px 9px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right" }} />
+                  </td>
+                  <td style={{ padding: "10px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ fontSize: 12, color: "#78716C" }}>₹</span>
+                      <input type="number" min="0" value={e.revenue} placeholder="0"
+                        onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], revenue: ev.target.value } }))}
+                        style={{ width: 120, padding: "6px 9px", border: hasRevenue ? "1.5px solid #16A34A" : "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right", background: hasRevenue ? "#F0FDF4" : "#fff", fontWeight: hasRevenue ? 700 : 400 }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ fontSize: 12, color: "#78716C" }}>₹</span>
+                      <input type="number" min="0" value={e.expected} placeholder="0"
+                        onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], expected: ev.target.value } }))}
+                        style={{ width: 120, padding: "6px 9px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right" }} />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          {/* Totals footer */}
+          <tfoot>
+            <tr style={{ background: "#F9F8F7", borderTop: "2px solid #E7E5E4" }}>
+              <td colSpan={3} style={{ padding: "10px 12px", fontSize: 12, fontWeight: 700, color: "#1C1917" }}>Totals ({filtered.length} leads)</td>
+              <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#0891B2", textAlign: "right", paddingRight: 32 }}>{totalLicences > 0 ? totalLicences.toLocaleString("en-IN") : "—"}</td>
+              <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#16A34A", paddingLeft: 28 }}>{totalRevenue > 0 ? `₹${totalRevenue.toLocaleString("en-IN")}` : "—"}</td>
+              <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#D97706", paddingLeft: 28 }}>{totalExpected > 0 ? `₹${totalExpected.toLocaleString("en-IN")}` : "—"}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }
