@@ -58,7 +58,7 @@ const ChartLegend = ({ items }: { items: [string, string][] }) => (
 export default function AdminDashboard() {
   const [clients, setClients] = useState<any[]>([]);
   const [sel, setSel] = useState("all");
-  const [timeline, setTimeline] = useState(30);
+  const [timeline, setTimeline] = useState(365);
   const [tab, setTab] = useState("Summary");
   const [campChan, setCampChan] = useState("Email Campaign");
   const [reportTab, setReportTab] = useState("Leads");

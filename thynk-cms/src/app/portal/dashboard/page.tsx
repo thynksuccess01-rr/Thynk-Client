@@ -58,7 +58,7 @@ const ChartLegend = ({ items }: { items: [string, string][] }) => (
 export default function PortalDashboard() {
   const [clientData, setClientData] = useState<any>(null);
   const [clientId, setClientId] = useState<string|null>(null);
-  const [timeline, setTimeline] = useState(30);
+  const [timeline, setTimeline] = useState(365);
   const [tab, setTab] = useState("Summary");
   const [campChan, setCampChan] = useState("Email Campaign");
   const [reportTab, setReportTab] = useState("Leads");
