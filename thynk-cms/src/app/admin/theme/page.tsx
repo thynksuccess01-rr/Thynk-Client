@@ -238,6 +238,10 @@ export default function ThemePage() {
         data.forEach((r: any) => { obj[r.key] = r.value; });
         setTheme(prev => ({ ...prev, ...obj }));
         setColorDraft(obj);
+        if (obj["active_preset"]) setActivePreset(obj["active_preset"]);
+        if (obj["preset_vars"]) {
+          try { applyThemeVars(JSON.parse(obj["preset_vars"])); } catch {}
+        }
       }
     });
   }, []);
@@ -253,14 +257,27 @@ export default function ThemePage() {
   async function save() {
     setSaving(true);
     const final = { ...merged };
-    const upserts = Object.entries(final).map(([key, value]) => ({ key, value, updated_at: new Date().toISOString() }));
+    const matchingPreset = PRESET_THEMES.find(p => p.id === activePreset);
+    const cssVars: Record<string, string> = matchingPreset
+      ? matchingPreset.vars
+      : {
+          "--bg": final.admin_bg, "--bg2": "#FFFFFF",
+          "--sidebar": final.admin_sidebar, "--sidebar-text": "#E7E5E4",
+          "--sidebar-muted": "#78716C", "--sidebar-active": final.admin_gold,
+          "--accent": final.admin_accent, "--accent2": final.admin_gold,
+          "--text": "#1C1917", "--text2": "#57534E", "--text3": "#A8A29E",
+          "--border": "#E7E5E4", "--border2": "#D6D3D1",
+        };
+    const upserts = [
+      ...Object.entries(final).map(([key, value]) => ({ key, value, updated_at: new Date().toISOString() })),
+      { key: "preset_vars", value: JSON.stringify(cssVars), updated_at: new Date().toISOString() },
+      { key: "active_preset", value: activePreset, updated_at: new Date().toISOString() },
+    ];
     const { error } = await supabase.from("theme_config").upsert(upserts, { onConflict: "key" });
     if (error) { toast.error(error.message); setSaving(false); return; }
     setTheme(final as typeof DEFAULT_THEME);
     setColorDraft({});
-    const matchingPreset = PRESET_THEMES.find(p => p.id === activePreset);
-    if (matchingPreset) applyThemeVars(matchingPreset.vars);
-    else applyThemeVars({ "--accent": final.admin_accent, "--sidebar": final.admin_sidebar, "--bg": final.admin_bg, "--sidebar-active": final.admin_gold, "--accent2": final.admin_gold });
+    applyThemeVars(cssVars);
     toast.success("Theme saved & applied globally");
     setSaving(false);
   }

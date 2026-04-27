@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, TrendingUp, Activity, LogOut, ChevronRight, Clock, Bell, FileText, X } from "lucide-react";
+import { LayoutDashboard, TrendingUp, Activity, LogOut, ChevronRight, Clock, Bell, FileText, X, Palette, Check } from "lucide-react";
 
 const nav = [
   { label: "Dashboard",     href: "/portal/dashboard",  icon: LayoutDashboard },
@@ -21,13 +21,29 @@ const NOTIF_META: Record<string,{icon:string,color:string,bg:string}> = {
   system:        { icon:"🔔", color:"#0891B2", bg:"#ECFEFF" },
 };
 
+const PORTAL_THEMES = [
+  { id:"ember",    name:"Ember",    sidebar:"#1C1917", accent:"#E8611A", bg:"#F5F4F0" },
+  { id:"ocean",    name:"Ocean",    sidebar:"#0F172A", accent:"#3B82F6", bg:"#F0F9FF" },
+  { id:"forest",   name:"Forest",   sidebar:"#052E16", accent:"#16A34A", bg:"#F0FDF4" },
+  { id:"royal",    name:"Royal",    sidebar:"#1E1B4B", accent:"#7C3AED", bg:"#FAF5FF" },
+  { id:"rose",     name:"Rose",     sidebar:"#1C0A10", accent:"#E11D48", bg:"#FFF1F3" },
+  { id:"slate",    name:"Slate",    sidebar:"#1E293B", accent:"#0D9488", bg:"#F8FAFC" },
+  { id:"midnight", name:"Dark",     sidebar:"#09090B", accent:"#6366F1", bg:"#18181B" },
+  { id:"amber",    name:"Amber",    sidebar:"#2C1A0F", accent:"#D97706", bg:"#FFFBEB" },
+  { id:"arctic",   name:"Arctic",   sidebar:"#E2E8F0", accent:"#0369A1", bg:"#F8FAFC" },
+  { id:"coral",    name:"Coral",    sidebar:"#3B0764", accent:"#F97316", bg:"#FFF7ED" },
+];
+
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const [client,       setClient]       = useState<any>(null);
   const [user,         setUser]         = useState<any>(null);
   const [clientId,     setClientId]     = useState<string|null>(null);
   const [notifications,setNotifications]= useState<any[]>([]);
   const [showNotifs,   setShowNotifs]   = useState(false);
-  const notifRef = useRef<HTMLDivElement>(null);
+  const [showThemes,   setShowThemes]   = useState(false);
+  const [activeTheme,  setActiveTheme]  = useState("ember");
+  const notifRef  = useRef<HTMLDivElement>(null);
+  const themeRef  = useRef<HTMLDivElement>(null);
   const path = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -41,11 +57,23 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       const profile = profileRaw as any;
       if (!profile?.clients) return;
       const c = profile.clients;
-      setClient(c);
+      // Check if user has a saved portal theme preference
+      let displayClient = { ...c };
+      try {
+        const savedThemeId = localStorage.getItem("portal_theme");
+        if (savedThemeId) {
+          const saved = PORTAL_THEMES.find(t => t.id === savedThemeId);
+          if (saved) {
+            displayClient = { ...c, primary_color: saved.sidebar, accent_color: saved.accent };
+            setActiveTheme(savedThemeId);
+          }
+        }
+      } catch {}
+      setClient(displayClient);
 
       // Apply branding
-      document.documentElement.style.setProperty("--portal-primary", c.primary_color);
-      document.documentElement.style.setProperty("--portal-accent", c.accent_color);
+      document.documentElement.style.setProperty("--portal-primary", displayClient.primary_color);
+      document.documentElement.style.setProperty("--portal-accent", displayClient.accent_color);
       document.body.style.fontFamily = `'${c.font_family ?? "DM Sans"}', sans-serif`;
 
       const cid = profile.client_id;
@@ -82,12 +110,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     setNotifications(data ?? []);
   }
 
-  // Close notif panel on outside click
+  // Close panels on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setShowNotifs(false);
-      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifs(false);
+      if (themeRef.current && !themeRef.current.contains(e.target as Node)) setShowThemes(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -107,6 +134,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   async function logout() {
     await supabase.auth.signOut();
     router.push("/login");
+  }
+
+  function applyPortalTheme(t: typeof PORTAL_THEMES[0]) {
+    setActiveTheme(t.id);
+    // Update local client state so sidebar reflects change immediately
+    setClient((prev: any) => prev ? { ...prev, primary_color: t.sidebar, accent_color: t.accent } : prev);
+    // Persist preference to localStorage for this session
+    try { localStorage.setItem("portal_theme", t.id); } catch {}
   }
 
   const primary  = client?.primary_color ?? "#2C1A0F";
@@ -171,8 +206,49 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       </aside>
 
       <main className="flex-1 ml-60 min-h-screen">
-        {/* Top bar with notification bell */}
-        <div style={{ padding: "14px 32px", borderBottom: "1px solid #E7E5E4", background: "#fff", display: "flex", alignItems: "center", justifyContent: "flex-end", position: "sticky", top: 0, zIndex: 20 }}>
+        {/* Top bar with theme switcher + notification bell */}
+        <div style={{ padding: "14px 32px", borderBottom: "1px solid var(--border, #E7E5E4)", background: "var(--bg2, #fff)", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, position: "sticky", top: 0, zIndex: 20 }}>
+
+          {/* Theme switcher */}
+          <div ref={themeRef} style={{ position: "relative" }}>
+            <button onClick={() => setShowThemes(p => !p)}
+              style={{ background: "transparent", border: "1px solid var(--border, #E7E5E4)", borderRadius: 10, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--text, #1C1917)", fontFamily: "inherit" }}>
+              <Palette size={16} />
+              Theme
+            </button>
+            {showThemes && (
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 320, background: "var(--bg2, #fff)", border: "1px solid var(--border, #E7E5E4)", borderRadius: 14, boxShadow: "0 12px 40px rgba(0,0,0,0.15)", zIndex: 100, overflow: "hidden" }}>
+                <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border, #E7E5E4)" }}>
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text, #1C1917)" }}>Choose a Theme</p>
+                  <p style={{ fontSize: 11, color: "var(--text3, #A8A29E)", marginTop: 2 }}>Changes your portal look instantly</p>
+                </div>
+                <div style={{ padding: 12, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                  {PORTAL_THEMES.map(t => (
+                    <button key={t.id} onClick={() => { applyPortalTheme(t); setShowThemes(false); }}
+                      style={{
+                        padding: "10px 12px", borderRadius: 10, cursor: "pointer", textAlign: "left",
+                        border: `2px solid ${activeTheme === t.id ? t.accent : "var(--border, #E7E5E4)"}`,
+                        background: activeTheme === t.id ? `${t.accent}10` : "transparent",
+                        fontFamily: "inherit", transition: "all 0.15s", position: "relative",
+                      }}>
+                      <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
+                        <div style={{ width: 20, height: 20, borderRadius: 5, background: t.sidebar, border: "1px solid rgba(0,0,0,0.1)" }} />
+                        <div style={{ width: 14, height: 20, borderRadius: 5, background: t.accent, border: "1px solid rgba(0,0,0,0.1)" }} />
+                        <div style={{ width: 14, height: 20, borderRadius: 5, background: t.bg, border: "1px solid rgba(0,0,0,0.1)" }} />
+                      </div>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text, #1C1917)" }}>{t.name}</p>
+                      {activeTheme === t.id && (
+                        <div style={{ position: "absolute", top: 8, right: 8, width: 16, height: 16, borderRadius: "50%", background: t.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Check size={10} color="#fff" strokeWidth={3} />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div ref={notifRef} style={{ position: "relative" }}>
             <button onClick={() => {
                 const next = !showNotifs;
