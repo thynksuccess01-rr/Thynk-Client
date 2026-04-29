@@ -7,209 +7,107 @@ import toast from "react-hot-toast";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const LEAD_STATUSES = [
-  "new",
-  "contacted",
-  "qualified",
-  "proposal",
-  "negotiation",
-  "won",
-  "lost",
-] as const;
-
+const LEAD_STATUSES = ["new","contacted","qualified","proposal","negotiation","won","lost"] as const;
 type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 const STATUS_COLOR: Record<LeadStatus, string> = {
-  new: "#3B82F6",
-  contacted: "#F59E0B",
-  qualified: "#F59E0B",
-  proposal: "#8B5CF6",
-  negotiation: "#F97316",
-  won: "#16A34A",
-  lost: "#EF4444",
+  new: "#3B82F6", contacted: "#F59E0B", qualified: "#F59E0B",
+  proposal: "#8B5CF6", negotiation: "#F97316", won: "#16A34A", lost: "#EF4444",
+};
+const STATUS_STYLE: Record<LeadStatus, { bg: string; text: string }> = {
+  new: { bg: "#EEF2FF", text: "#4338CA" }, contacted: { bg: "#FFFBEB", text: "#B45309" },
+  qualified: { bg: "#FFF7ED", text: "#C2410C" }, proposal: { bg: "#F5F3FF", text: "#6D28D9" },
+  negotiation: { bg: "#FEF3C7", text: "#92400E" }, won: { bg: "#DCFCE7", text: "#15803D" },
+  lost: { bg: "#FEE2E2", text: "#B91C1C" },
 };
 
-const STATUS_STYLE: Record<LeadStatus, { bg: string; text: string }> = {
-  new:         { bg: "#EEF2FF", text: "#4338CA" },
-  contacted:   { bg: "#FFFBEB", text: "#B45309" },
-  qualified:   { bg: "#FFF7ED", text: "#C2410C" },
-  proposal:    { bg: "#F5F3FF", text: "#6D28D9" },
-  negotiation: { bg: "#FEF3C7", text: "#92400E" },
-  won:         { bg: "#DCFCE7", text: "#15803D" },
-  lost:        { bg: "#FEE2E2", text: "#B91C1C" },
-};
+// ─── Call metric config (ordered for display) ─────────────────────────────────
+const CALL_METRICS = [
+  { key: "calls_made",             label: "New Calls Made",         icon: "📞", color: "#7C3AED", bg: "#F5F3FF" },
+  { key: "follow_up_calls_made",   label: "Follow Up Call Made",    icon: "🔁", color: "#2563EB", bg: "#EFF6FF" },
+  { key: "demo_scheduled",         label: "Demo Scheduled",         icon: "📅", color: "#0891B2", bg: "#ECFEFF" },
+  { key: "demo_completed",         label: "Demo Completed",         icon: "✅", color: "#16A34A", bg: "#F0FDF4" },
+  { key: "demo_rescheduled",       label: "Demo Rescheduled",       icon: "🔄", color: "#D97706", bg: "#FFFBEB" },
+  { key: "follow_up_meeting_done", label: "Follow Up Meeting Done", icon: "🤝", color: "#E8611A", bg: "#FFF7ED" },
+] as const;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-
-interface Client {
-  id: string;
-  name: string;
-}
-
+interface Client { id: string; name: string; }
 interface DataEntry {
-  id: string;
-  client_id: string;
-  period_start: string;
-  period_end: string;
-  entry_label?: string;
-  total_licences?: number;
-  total_revenue_collected?: number;
-  expected_collection?: number;
-  email_summary?: string;
-  whatsapp_summary?: string;
-  calls_summary?: string;
+  id: string; client_id: string; period_start: string; period_end: string;
+  entry_label?: string; total_licences?: number; total_revenue_collected?: number;
+  expected_collection?: number; email_summary?: string; whatsapp_summary?: string; calls_summary?: string;
 }
-
 interface Lead {
-  id: string;
-  client_id: string;
-  data_entry_id?: string | null;
-  name: string;
-  country?: string;
-  state?: string;
-  location?: string;
-  expected_volume?: number | null;
-  expected_revenue?: number | null;
-  revenue_collected?: number | null;
-  total_licences_allocated?: number | null;
-  status: LeadStatus;
-  notes?: string;
-  cycle_label?: string;
-  previous_status?: string;
-  is_updated_this_cycle?: boolean;
-  status_updated_at?: string;
-  updated_at?: string;
+  id: string; client_id: string; data_entry_id?: string | null; name: string;
+  country?: string; state?: string; location?: string; expected_volume?: number | null;
+  expected_revenue?: number | null; revenue_collected?: number | null;
+  total_licences_allocated?: number | null; status: LeadStatus; notes?: string;
+  cycle_label?: string; previous_status?: string; is_updated_this_cycle?: boolean;
+  status_updated_at?: string; updated_at?: string;
 }
-
 interface CampaignUpdate {
-  id: string;
-  data_entry_id: string;
-  client_id: string;
-  channel: "email" | "whatsapp" | "calls";
-  update_date: string;
-  email_sent: number;
-  email_opened: number;
-  email_clicked: number;
-  whatsapp_sent: number;
-  whatsapp_delivered: number;
-  whatsapp_replied: number;
-  calls_made: number;
-  calls_connected: number;
-  calls_converted: number;
-  notes?: string;
-  created_at?: string;
+  id: string; data_entry_id: string; client_id: string; channel: "email" | "whatsapp" | "calls";
+  update_date: string; email_sent: number; email_opened: number; email_clicked: number;
+  whatsapp_sent: number; whatsapp_delivered: number; whatsapp_replied: number;
+  calls_made: number; calls_connected: number; calls_converted: number;
+  follow_up_calls_made: number; demo_scheduled: number; demo_completed: number;
+  demo_rescheduled: number; follow_up_meeting_done: number; notes?: string; created_at?: string;
 }
-
 interface EntryForm {
-  period_start: string;
-  period_end: string;
-  entry_label: string;
-  total_licences: number;
-  total_revenue_collected: number;
-  expected_collection: number;
-  email_summary: string;
-  whatsapp_summary: string;
-  calls_summary: string;
+  period_start: string; period_end: string; entry_label: string; total_licences: number;
+  total_revenue_collected: number; expected_collection: number;
+  email_summary: string; whatsapp_summary: string; calls_summary: string;
 }
-
 interface LeadForm {
-  name: string;
-  country: string;
-  state: string;
-  location: string;
-  expected_volume: string;
-  expected_revenue: string;
-  status: LeadStatus;
-  notes: string;
-  cycle_label: string;
+  name: string; country: string; state: string; location: string;
+  expected_volume: string; expected_revenue: string; status: LeadStatus; notes: string; cycle_label: string;
 }
-
 interface UpdateForm {
-  channel: "email" | "whatsapp" | "calls";
-  update_date: string;
-  email_sent: number;
-  email_opened: number;
-  email_clicked: number;
-  whatsapp_sent: number;
-  whatsapp_delivered: number;
-  whatsapp_replied: number;
-  calls_made: number;
-  calls_connected: number;
-  calls_converted: number;
-  notes: string;
+  channel: "email" | "whatsapp" | "calls"; update_date: string;
+  email_sent: number; email_opened: number; email_clicked: number;
+  whatsapp_sent: number; whatsapp_delivered: number; whatsapp_replied: number;
+  calls_made: number; calls_connected: number; calls_converted: number;
+  follow_up_calls_made: number; demo_scheduled: number; demo_completed: number;
+  demo_rescheduled: number; follow_up_meeting_done: number; notes: string;
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
-
 const EMPTY_ENTRY: EntryForm = {
-  period_start: "",
-  period_end: "",
-  entry_label: "",
-  total_licences: 0,
-  total_revenue_collected: 0,
-  expected_collection: 0,
-  email_summary: "",
-  whatsapp_summary: "",
-  calls_summary: "",
+  period_start: "", period_end: "", entry_label: "", total_licences: 0,
+  total_revenue_collected: 0, expected_collection: 0, email_summary: "", whatsapp_summary: "", calls_summary: "",
 };
-
 const EMPTY_LEAD: LeadForm = {
-  name: "",
-  country: "",
-  state: "",
-  location: "",
-  expected_volume: "",
-  expected_revenue: "",
-  status: "new",
-  notes: "",
-  cycle_label: "",
+  name: "", country: "", state: "", location: "", expected_volume: "", expected_revenue: "",
+  status: "new", notes: "", cycle_label: "",
 };
-
 const createEmptyUpdate = (): UpdateForm => ({
-  channel: "email",
-  update_date: new Date().toISOString().split("T")[0],
-  email_sent: 0,
-  email_opened: 0,
-  email_clicked: 0,
-  whatsapp_sent: 0,
-  whatsapp_delivered: 0,
-  whatsapp_replied: 0,
-  calls_made: 0,
-  calls_connected: 0,
-  calls_converted: 0,
-  notes: "",
+  channel: "email", update_date: new Date().toISOString().split("T")[0],
+  email_sent: 0, email_opened: 0, email_clicked: 0,
+  whatsapp_sent: 0, whatsapp_delivered: 0, whatsapp_replied: 0,
+  calls_made: 0, calls_connected: 0, calls_converted: 0,
+  follow_up_calls_made: 0, demo_scheduled: 0, demo_completed: 0,
+  demo_rescheduled: 0, follow_up_meeting_done: 0, notes: "",
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const fmtINR = (n: number): string => {
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
   if (n >= 1000) return `₹${(n / 1000).toFixed(0)}K`;
   return `₹${n}`;
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
+// ─── Section component ────────────────────────────────────────────────────────
 interface SectionProps {
-  id: string;
-  label: string;
-  color: string;
-  children: React.ReactNode;
-  expandedSection: string;
-  onToggle: (id: string) => void;
+  id: string; label: string; color: string; children: React.ReactNode;
+  expandedSection: string; onToggle: (id: string) => void;
 }
-
 function Section({ id, label, color, children, expandedSection, onToggle }: SectionProps) {
   const isOpen = expandedSection === id;
   return (
     <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 10, overflow: "hidden", marginBottom: 10 }}>
-      <button
-        onClick={() => onToggle(id)}
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}
-      >
-        <span style={{ width: 24, height: 24, borderRadius: 6, background: color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-          {id.toUpperCase()}
-        </span>
+      <button onClick={() => onToggle(id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+        <span style={{ width: 24, height: 24, borderRadius: 6, background: color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", flexShrink: 0 }}>{id.toUpperCase()}</span>
         <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1C1917", flex: 1 }}>{label}</span>
         {isOpen ? <ChevronDown size={14} color="#78716C" /> : <ChevronRight size={14} color="#78716C" />}
       </button>
@@ -218,33 +116,7 @@ function Section({ id, label, color, children, expandedSection, onToggle }: Sect
   );
 }
 
-interface NumFieldProps {
-  label: string;
-  fieldKey: keyof EntryForm;
-  form: EntryForm;
-  onChange: (key: keyof EntryForm, value: number) => void;
-}
-
-function NumField({ label, fieldKey, form, onChange }: NumFieldProps) {
-  return (
-    <div>
-      <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
-        {label}
-      </label>
-      <input
-        type="number"
-        className="input"
-        value={form[fieldKey] as number}
-        onChange={(e) => onChange(fieldKey, Number(e.target.value))}
-        min={0}
-        style={{ fontSize: 13 }}
-      />
-    </div>
-  );
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
-
 export default function DataPanelPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>("");
@@ -259,8 +131,6 @@ export default function DataPanelPage() {
   const [showUpdateForm, setShowUpdateForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string>("a");
-
-  // Revenue modal state
   const [showRevenueModal, setShowRevenueModal] = useState(false);
   const [allClientLeads, setAllClientLeads] = useState<Lead[]>([]);
   const [revenueSearch, setRevenueSearch] = useState("");
@@ -269,595 +139,290 @@ export default function DataPanelPage() {
 
   const supabase = createClient();
 
-  // ─── Data Loading ────────────────────────────────────────────────────────────
-
   useEffect(() => {
     supabase.from("clients").select("id,name").order("name").then((r) => setClients(r.data ?? []));
   }, []);
-
+  useEffect(() => { if (selectedClient) { loadEntries(); loadLeads(); } }, [selectedClient]);
   useEffect(() => {
-    if (selectedClient) {
-      loadEntries();
-      loadLeads();
-    }
-  }, [selectedClient]);
-
-  useEffect(() => {
-    if (activeEntry && activeEntry !== "new") {
-      loadUpdates();
-    } else {
-      setUpdates([]);
-    }
+    if (activeEntry && activeEntry !== "new") loadUpdates();
+    else setUpdates([]);
   }, [activeEntry]);
 
   async function loadEntries() {
-    const { data } = await supabase
-      .from("data_entries")
-      .select("*")
-      .eq("client_id", selectedClient)
-      .order("period_start", { ascending: false });
+    const { data } = await supabase.from("data_entries").select("*").eq("client_id", selectedClient).order("period_start", { ascending: false });
     setEntries(data ?? []);
   }
-
   async function loadLeads() {
-    const { data } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("client_id", selectedClient)
-      .order("created_at", { ascending: false });
+    const { data } = await supabase.from("leads").select("*").eq("client_id", selectedClient).order("created_at", { ascending: false });
     setLeads(data ?? []);
   }
-
   async function loadUpdates() {
     if (!activeEntry || activeEntry === "new") return;
-    const { data } = await supabase
-      .from("campaign_updates")
-      .select("*")
-      .eq("data_entry_id", activeEntry)
-      .order("update_date")
-      .order("created_at");
+    const { data } = await supabase.from("campaign_updates").select("*").eq("data_entry_id", activeEntry).order("update_date").order("created_at");
     setUpdates(data ?? []);
   }
 
-  // ─── Revenue Modal ────────────────────────────────────────────────────────────
-
+  // Revenue modal
   async function openRevenueModal() {
     if (!selectedClient) { toast.error("Select a client first"); return; }
-    const { data } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("client_id", selectedClient)
-      .order("status")
-      .order("name");
+    const { data } = await supabase.from("leads").select("*").eq("client_id", selectedClient).order("status").order("name");
     setAllClientLeads(data ?? []);
     const existing: Record<string, string> = {};
-    (data ?? []).forEach((l: Lead) => {
-      if (l.revenue_collected != null && l.revenue_collected > 0) {
-        existing[l.id] = String(l.revenue_collected);
-      }
-    });
-    setRevenueEdits(existing);
-    setRevenueSearch("");
-    setShowRevenueModal(true);
+    (data ?? []).forEach((l: Lead) => { if (l.revenue_collected != null && l.revenue_collected > 0) existing[l.id] = String(l.revenue_collected); });
+    setRevenueEdits(existing); setRevenueSearch(""); setShowRevenueModal(true);
   }
-
   async function saveRevenueToLeads() {
-    if (!activeEntry || activeEntry === "new") {
-      toast.error("Save the period first");
-      return;
-    }
+    if (!activeEntry || activeEntry === "new") { toast.error("Save the period first"); return; }
     setSavingRevenue(true);
     try {
       for (const [id, val] of Object.entries(revenueEdits)) {
-        await supabase.from("leads").update({
-          revenue_collected: val === "" ? 0 : Number(val),
-          updated_at: new Date().toISOString(),
-        }).eq("id", id);
+        await supabase.from("leads").update({ revenue_collected: val === "" ? 0 : Number(val), updated_at: new Date().toISOString() }).eq("id", id);
       }
-      // Sum revenue_collected across all client leads
-      const { data: allLeads } = await supabase
-        .from("leads")
-        .select("revenue_collected, expected_revenue, status")
-        .eq("client_id", selectedClient);
+      const { data: allLeads } = await supabase.from("leads").select("revenue_collected, expected_revenue, status").eq("client_id", selectedClient);
       const total = (allLeads ?? []).reduce((s: number, l: any) => s + (l.revenue_collected ?? 0), 0);
-      const expected = (allLeads ?? [])
-        .filter((l: any) => l.status !== "lost")
-        .reduce((s: number, l: any) => s + (l.expected_revenue ?? 0), 0);
-      // Write back to period entry
-      await supabase.from("data_entries").update({
-        total_revenue_collected: total,
-        expected_collection: expected,
-        updated_at: new Date().toISOString(),
-      }).eq("id", activeEntry);
+      const expected = (allLeads ?? []).filter((l: any) => l.status !== "lost").reduce((s: number, l: any) => s + (l.expected_revenue ?? 0), 0);
+      await supabase.from("data_entries").update({ total_revenue_collected: total, expected_collection: expected, updated_at: new Date().toISOString() }).eq("id", activeEntry);
       setForm(prev => ({ ...prev, total_revenue_collected: total, expected_collection: expected }));
       toast.success("Revenue saved & period totals updated");
-      setShowRevenueModal(false);
-      loadLeads();
-      loadEntries();
-    } catch (e: any) {
-      toast.error(e.message ?? "Error saving revenue");
-    } finally {
-      setSavingRevenue(false);
-    }
+      setShowRevenueModal(false); loadLeads(); loadEntries();
+    } catch (e: any) { toast.error(e.message ?? "Error saving revenue"); }
+    finally { setSavingRevenue(false); }
   }
 
-  // ─── CRUD: Entries ───────────────────────────────────────────────────────────
+  // Resync helper
+  async function resyncEntryTotals(entryId: string, allUpds: any[]) {
+    const eu = allUpds.filter((u: any) => u.channel === "email");
+    const wu = allUpds.filter((u: any) => u.channel === "whatsapp");
+    const cu = allUpds.filter((u: any) => u.channel === "calls");
+    const sc = (key: string) => cu.reduce((s: number, u: any) => s + (u[key] ?? 0), 0);
+    await supabase.from("data_entries").update({
+      email_sent: eu.reduce((s: number, u: any) => s + (u.email_sent ?? 0), 0),
+      email_opened: eu.reduce((s: number, u: any) => s + (u.email_opened ?? 0), 0),
+      email_clicked: eu.reduce((s: number, u: any) => s + (u.email_clicked ?? 0), 0),
+      whatsapp_sent: wu.reduce((s: number, u: any) => s + (u.whatsapp_sent ?? 0), 0),
+      whatsapp_delivered: wu.reduce((s: number, u: any) => s + (u.whatsapp_delivered ?? 0), 0),
+      whatsapp_replied: wu.reduce((s: number, u: any) => s + (u.whatsapp_replied ?? 0), 0),
+      calls_made: sc("calls_made"),
+      calls_connected: sc("calls_connected"),
+      calls_converted: sc("calls_converted"),
+      follow_up_calls_made: sc("follow_up_calls_made"),
+      demo_scheduled: sc("demo_scheduled"),
+      demo_completed: sc("demo_completed"),
+      demo_rescheduled: sc("demo_rescheduled"),
+      follow_up_meeting_done: sc("follow_up_meeting_done"),
+      updated_at: new Date().toISOString(),
+    }).eq("id", entryId);
+  }
 
   async function saveEntry() {
-    if (!form.period_start || !form.period_end) {
-      toast.error("Set period dates");
-      return;
-    }
+    if (!form.period_start || !form.period_end) { toast.error("Set period dates"); return; }
     setSaving(true);
-
-    // Always recompute totals from campaign_updates so dashboards stay in sync
     const entryId = activeEntry && activeEntry !== "new" ? activeEntry : null;
     let upds: any[] = updates;
     if (entryId && updates.length === 0) {
-      // Re-fetch in case updates state is stale
-      const { data: freshUpds } = await supabase
-        .from("campaign_updates").select("*").eq("data_entry_id", entryId);
+      const { data: freshUpds } = await supabase.from("campaign_updates").select("*").eq("data_entry_id", entryId);
       upds = freshUpds ?? [];
     }
-    const emailUpds   = upds.filter((u: any) => u.channel === "email");
-    const waUpds      = upds.filter((u: any) => u.channel === "whatsapp");
-    const callUpds    = upds.filter((u: any) => u.channel === "calls");
-
+    const eu = upds.filter((u: any) => u.channel === "email");
+    const wu = upds.filter((u: any) => u.channel === "whatsapp");
+    const cu = upds.filter((u: any) => u.channel === "calls");
+    const sc = (key: string) => cu.reduce((s: number, u: any) => s + (u[key] ?? 0), 0);
     const payload = {
-      ...form,
-      client_id: selectedClient,
-      updated_at: new Date().toISOString(),
-      // Sum all campaign_updates rows into data_entries so every dashboard reads correct totals
-      email_sent:          emailUpds.reduce((s: number, u: any) => s + (u.email_sent        ?? 0), 0),
-      email_opened:        emailUpds.reduce((s: number, u: any) => s + (u.email_opened      ?? 0), 0),
-      email_clicked:       emailUpds.reduce((s: number, u: any) => s + (u.email_clicked     ?? 0), 0),
-      whatsapp_sent:       waUpds.reduce(   (s: number, u: any) => s + (u.whatsapp_sent     ?? 0), 0),
-      whatsapp_delivered:  waUpds.reduce(   (s: number, u: any) => s + (u.whatsapp_delivered?? 0), 0),
-      whatsapp_replied:    waUpds.reduce(   (s: number, u: any) => s + (u.whatsapp_replied  ?? 0), 0),
-      calls_made:          callUpds.reduce( (s: number, u: any) => s + (u.calls_made        ?? 0), 0),
-      calls_connected:     callUpds.reduce( (s: number, u: any) => s + (u.calls_connected   ?? 0), 0),
-      calls_converted:     callUpds.reduce( (s: number, u: any) => s + (u.calls_converted   ?? 0), 0),
+      ...form, client_id: selectedClient, updated_at: new Date().toISOString(),
+      email_sent: eu.reduce((s: number, u: any) => s + (u.email_sent ?? 0), 0),
+      email_opened: eu.reduce((s: number, u: any) => s + (u.email_opened ?? 0), 0),
+      email_clicked: eu.reduce((s: number, u: any) => s + (u.email_clicked ?? 0), 0),
+      whatsapp_sent: wu.reduce((s: number, u: any) => s + (u.whatsapp_sent ?? 0), 0),
+      whatsapp_delivered: wu.reduce((s: number, u: any) => s + (u.whatsapp_delivered ?? 0), 0),
+      whatsapp_replied: wu.reduce((s: number, u: any) => s + (u.whatsapp_replied ?? 0), 0),
+      calls_made: sc("calls_made"), calls_connected: sc("calls_connected"), calls_converted: sc("calls_converted"),
+      follow_up_calls_made: sc("follow_up_calls_made"), demo_scheduled: sc("demo_scheduled"),
+      demo_completed: sc("demo_completed"), demo_rescheduled: sc("demo_rescheduled"),
+      follow_up_meeting_done: sc("follow_up_meeting_done"),
     };
-
     if (activeEntry && activeEntry !== "new") {
       const { error } = await supabase.from("data_entries").update(payload).eq("id", activeEntry);
-      if (error) toast.error(error.message);
-      else { toast.success("Saved"); loadEntries(); }
+      if (error) toast.error(error.message); else { toast.success("Saved"); loadEntries(); }
     } else {
-      const { data, error } = await supabase
-        .from("data_entries")
-        .insert({ ...payload, created_at: new Date().toISOString() })
-        .select()
-        .single();
-      if (error) toast.error(error.message);
-      else { setActiveEntry(data.id); toast.success("Period created"); loadEntries(); }
+      const { data, error } = await supabase.from("data_entries").insert({ ...payload, created_at: new Date().toISOString() }).select().single();
+      if (error) toast.error(error.message); else { setActiveEntry(data.id); toast.success("Period created"); loadEntries(); }
     }
     setSaving(false);
   }
-
   async function deleteEntry(id: string) {
-    if (!confirm("Delete this period and all its campaign data? This cannot be undone.")) return;
+    if (!confirm("Delete this period and all its campaign data?")) return;
     await supabase.from("campaign_updates").delete().eq("data_entry_id", id);
     await supabase.from("leads").update({ data_entry_id: null }).eq("data_entry_id", id);
     const { error } = await supabase.from("data_entries").delete().eq("id", id);
     if (error) toast.error(error.message);
-    else {
-      toast.success("Period deleted");
-      setActiveEntry(null);
-      setForm(EMPTY_ENTRY);
-      loadEntries();
-      loadLeads();
-    }
+    else { toast.success("Period deleted"); setActiveEntry(null); setForm(EMPTY_ENTRY); loadEntries(); loadLeads(); }
   }
-
   function selectEntry(entry: DataEntry) {
     setActiveEntry(entry.id);
-    setForm({
-      period_start: entry.period_start,
-      period_end: entry.period_end,
-      entry_label: entry.entry_label ?? "",
-      total_licences: entry.total_licences ?? 0,
-      total_revenue_collected: entry.total_revenue_collected ?? 0,
-      expected_collection: entry.expected_collection ?? 0,
-      email_summary: entry.email_summary ?? "",
-      whatsapp_summary: entry.whatsapp_summary ?? "",
-      calls_summary: entry.calls_summary ?? "",
-    });
+    setForm({ period_start: entry.period_start, period_end: entry.period_end, entry_label: entry.entry_label ?? "", total_licences: entry.total_licences ?? 0, total_revenue_collected: entry.total_revenue_collected ?? 0, expected_collection: entry.expected_collection ?? 0, email_summary: entry.email_summary ?? "", whatsapp_summary: entry.whatsapp_summary ?? "", calls_summary: entry.calls_summary ?? "" });
     setExpandedSection("a");
   }
-
-  // ─── CRUD: Campaign Updates ──────────────────────────────────────────────────
-
   async function saveCampaignUpdate() {
-    if (!activeEntry || activeEntry === "new") {
-      toast.error("Save the period first");
-      return;
-    }
-    const { error } = await supabase.from("campaign_updates").insert({
-      ...newUpdate,
-      data_entry_id: activeEntry,
-      client_id: selectedClient,
-      created_at: new Date().toISOString(),
-    });
+    if (!activeEntry || activeEntry === "new") { toast.error("Save the period first"); return; }
+    const { error } = await supabase.from("campaign_updates").insert({ ...newUpdate, data_entry_id: activeEntry, client_id: selectedClient, created_at: new Date().toISOString() });
     if (error) { toast.error(error.message); return; }
-
-    // Immediately resync data_entry totals from all campaign_updates
-    const { data: allUpds } = await supabase
-      .from("campaign_updates").select("*").eq("data_entry_id", activeEntry);
-    const eu = (allUpds ?? []).filter((u: any) => u.channel === "email");
-    const wu = (allUpds ?? []).filter((u: any) => u.channel === "whatsapp");
-    const cu = (allUpds ?? []).filter((u: any) => u.channel === "calls");
-    await supabase.from("data_entries").update({
-      email_sent:         eu.reduce((s: number, u: any) => s + (u.email_sent         ?? 0), 0),
-      email_opened:       eu.reduce((s: number, u: any) => s + (u.email_opened       ?? 0), 0),
-      email_clicked:      eu.reduce((s: number, u: any) => s + (u.email_clicked      ?? 0), 0),
-      whatsapp_sent:      wu.reduce((s: number, u: any) => s + (u.whatsapp_sent      ?? 0), 0),
-      whatsapp_delivered: wu.reduce((s: number, u: any) => s + (u.whatsapp_delivered ?? 0), 0),
-      whatsapp_replied:   wu.reduce((s: number, u: any) => s + (u.whatsapp_replied   ?? 0), 0),
-      calls_made:         cu.reduce((s: number, u: any) => s + (u.calls_made         ?? 0), 0),
-      calls_connected:    cu.reduce((s: number, u: any) => s + (u.calls_connected    ?? 0), 0),
-      calls_converted:    cu.reduce((s: number, u: any) => s + (u.calls_converted    ?? 0), 0),
-      updated_at: new Date().toISOString(),
-    }).eq("id", activeEntry);
-
-    toast.success("Entry added");
-    setNewUpdate(createEmptyUpdate());
-    setShowUpdateForm(false);
-    loadUpdates();
-    loadEntries(); // refresh sidebar totals
+    const { data: allUpds } = await supabase.from("campaign_updates").select("*").eq("data_entry_id", activeEntry);
+    await resyncEntryTotals(activeEntry, allUpds ?? []);
+    toast.success("Entry added"); setNewUpdate(createEmptyUpdate()); setShowUpdateForm(false); loadUpdates(); loadEntries();
   }
-
   async function deleteUpdate(id: string) {
     await supabase.from("campaign_updates").delete().eq("id", id);
-    // Resync data_entry totals after deletion
     if (activeEntry && activeEntry !== "new") {
-      const { data: allUpds } = await supabase
-        .from("campaign_updates").select("*").eq("data_entry_id", activeEntry);
-      const eu = (allUpds ?? []).filter((u: any) => u.channel === "email");
-      const wu = (allUpds ?? []).filter((u: any) => u.channel === "whatsapp");
-      const cu = (allUpds ?? []).filter((u: any) => u.channel === "calls");
-      await supabase.from("data_entries").update({
-        email_sent:         eu.reduce((s: number, u: any) => s + (u.email_sent         ?? 0), 0),
-        email_opened:       eu.reduce((s: number, u: any) => s + (u.email_opened       ?? 0), 0),
-        email_clicked:      eu.reduce((s: number, u: any) => s + (u.email_clicked      ?? 0), 0),
-        whatsapp_sent:      wu.reduce((s: number, u: any) => s + (u.whatsapp_sent      ?? 0), 0),
-        whatsapp_delivered: wu.reduce((s: number, u: any) => s + (u.whatsapp_delivered ?? 0), 0),
-        whatsapp_replied:   wu.reduce((s: number, u: any) => s + (u.whatsapp_replied   ?? 0), 0),
-        calls_made:         cu.reduce((s: number, u: any) => s + (u.calls_made         ?? 0), 0),
-        calls_connected:    cu.reduce((s: number, u: any) => s + (u.calls_connected    ?? 0), 0),
-        calls_converted:    cu.reduce((s: number, u: any) => s + (u.calls_converted    ?? 0), 0),
-        updated_at: new Date().toISOString(),
-      }).eq("id", activeEntry);
-      loadEntries();
+      const { data: allUpds } = await supabase.from("campaign_updates").select("*").eq("data_entry_id", activeEntry);
+      await resyncEntryTotals(activeEntry, allUpds ?? []); loadEntries();
     }
-    toast.success("Deleted");
-    loadUpdates();
+    toast.success("Deleted"); loadUpdates();
   }
-
-  // ─── CRUD: Leads ─────────────────────────────────────────────────────────────
-
   async function saveLead() {
-    if (!newLead.name) {
-      toast.error("Lead name required");
-      return;
-    }
-    if (!activeEntry || activeEntry === "new") {
-      toast.error("Save the period first before adding a lead");
-      return;
-    }
-    const payload = {
-      ...newLead,
-      client_id: selectedClient,
-      data_entry_id: activeEntry,
-      expected_volume: newLead.expected_volume ? Number(newLead.expected_volume) : null,
-      expected_revenue: newLead.expected_revenue ? Number(newLead.expected_revenue) : null,
-    };
+    if (!newLead.name) { toast.error("Lead name required"); return; }
+    if (!activeEntry || activeEntry === "new") { toast.error("Save the period first before adding a lead"); return; }
+    const payload = { ...newLead, client_id: selectedClient, data_entry_id: activeEntry, expected_volume: newLead.expected_volume ? Number(newLead.expected_volume) : null, expected_revenue: newLead.expected_revenue ? Number(newLead.expected_revenue) : null };
     const { error } = await supabase.from("leads").insert(payload);
     if (error) toast.error(error.message);
-    else {
-      toast.success("Lead added");
-      setNewLead(EMPTY_LEAD);
-      setShowLeadForm(false);
-      loadLeads();
-    }
+    else { toast.success("Lead added"); setNewLead(EMPTY_LEAD); setShowLeadForm(false); loadLeads(); }
   }
-
   async function deleteLead(id: string) {
     if (!confirm("Delete this lead?")) return;
     await supabase.from("leads").delete().eq("id", id);
-    toast.success("Deleted");
-    loadLeads();
+    toast.success("Deleted"); loadLeads();
   }
-
   async function updateLeadStatus(id: string, newStatus: string, oldStatus: string) {
-    await supabase.from("leads").update({
-      status: newStatus,
-      previous_status: oldStatus,
-      status_updated_at: new Date().toISOString(),
-      is_updated_this_cycle: true,
-      updated_at: new Date().toISOString(),
-    }).eq("id", id);
+    await supabase.from("leads").update({ status: newStatus, previous_status: oldStatus, status_updated_at: new Date().toISOString(), is_updated_this_cycle: true, updated_at: new Date().toISOString() }).eq("id", id);
     loadLeads();
   }
 
-  // ─── Derived Totals ───────────────────────────────────────────────────────────
-
-  const emailUpdates = updates.filter((u) => u.channel === "email");
-  const waUpdates = updates.filter((u) => u.channel === "whatsapp");
-  const callUpdates = updates.filter((u) => u.channel === "calls");
-
+  // Derived accumulated totals from live updates state
+  const emailUpds = updates.filter((u) => u.channel === "email");
+  const waUpds = updates.filter((u) => u.channel === "whatsapp");
+  const callUpds = updates.filter((u) => u.channel === "calls");
+  const sc = (key: keyof CampaignUpdate) => callUpds.reduce((s, u) => s + ((u[key] as number) ?? 0), 0);
   const accumulated = {
-    emailSent: emailUpdates.reduce((s, u) => s + u.email_sent, 0),
-    emailOpened: emailUpdates.reduce((s, u) => s + u.email_opened, 0),
-    emailClicked: emailUpdates.reduce((s, u) => s + u.email_clicked, 0),
-    waSent: waUpdates.reduce((s, u) => s + u.whatsapp_sent, 0),
-    waDelivered: waUpdates.reduce((s, u) => s + u.whatsapp_delivered, 0),
-    waReplied: waUpdates.reduce((s, u) => s + u.whatsapp_replied, 0),
-    callsMade: callUpdates.reduce((s, u) => s + u.calls_made, 0),
-    callsConnected: callUpdates.reduce((s, u) => s + u.calls_connected, 0),
-    callsConverted: callUpdates.reduce((s, u) => s + u.calls_converted, 0),
+    emailSent: emailUpds.reduce((s, u) => s + u.email_sent, 0),
+    emailOpened: emailUpds.reduce((s, u) => s + u.email_opened, 0),
+    emailClicked: emailUpds.reduce((s, u) => s + u.email_clicked, 0),
+    waSent: waUpds.reduce((s, u) => s + u.whatsapp_sent, 0),
+    waDelivered: waUpds.reduce((s, u) => s + u.whatsapp_delivered, 0),
+    waReplied: waUpds.reduce((s, u) => s + u.whatsapp_replied, 0),
+    callsMade: sc("calls_made"), callsConnected: sc("calls_connected"), callsConverted: sc("calls_converted"),
+    followUpCallsMade: sc("follow_up_calls_made"), demoScheduled: sc("demo_scheduled"),
+    demoCompleted: sc("demo_completed"), demoRescheduled: sc("demo_rescheduled"),
+    followUpMeetingDone: sc("follow_up_meeting_done"),
   };
 
-  function handleToggleSection(id: string) {
-    setExpandedSection(expandedSection === id ? "" : id);
-  }
-  function handleEntryFormChange(key: keyof EntryForm, value: string | number) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
-  function handleUpdateFormChange(key: keyof UpdateForm, value: string | number) {
-    setNewUpdate((prev) => ({ ...prev, [key]: value }));
-  }
-  function handleLeadFormChange(key: keyof LeadForm, value: string) {
-    setNewLead((prev) => ({ ...prev, [key]: value }));
-  }
+  const handleToggleSection = (id: string) => setExpandedSection(expandedSection === id ? "" : id);
+  const handleEntryFormChange = (key: keyof EntryForm, value: string | number) => setForm(prev => ({ ...prev, [key]: value }));
+  const handleUpdateFormChange = (key: keyof UpdateForm, value: string | number) => setNewUpdate(prev => ({ ...prev, [key]: value }));
+  const handleLeadFormChange = (key: keyof LeadForm, value: string) => setNewLead(prev => ({ ...prev, [key]: value }));
 
-  // Revenue modal filtered leads
-  const filteredModalLeads = allClientLeads.filter((l) => {
+  const filteredModalLeads = allClientLeads.filter(l => {
     if (!revenueSearch) return true;
     const q = revenueSearch.toLowerCase();
-    return (
-      l.name.toLowerCase().includes(q) ||
-      (l.location ?? "").toLowerCase().includes(q) ||
-      (l.country ?? "").toLowerCase().includes(q) ||
-      (l.state ?? "").toLowerCase().includes(q) ||
-      l.status.toLowerCase().includes(q)
-    );
+    return l.name.toLowerCase().includes(q) || (l.location ?? "").toLowerCase().includes(q) || (l.country ?? "").toLowerCase().includes(q) || (l.state ?? "").toLowerCase().includes(q) || l.status.toLowerCase().includes(q);
   });
-
   const revenueTotal = Object.values(revenueEdits).reduce((s, v) => s + (Number(v) || 0), 0);
-  const revenueLeadCount = Object.values(revenueEdits).filter((v) => Number(v) > 0).length;
-
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  const revenueLeadCount = Object.values(revenueEdits).filter(v => Number(v) > 0).length;
 
   return (
     <div>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 600, color: "#1C1917", fontFamily: "Fraunces,Georgia,serif" }}>
-            Data Panel
-          </h1>
-          <p style={{ fontSize: 13, color: "#78716C", marginTop: 3 }}>
-            Each campaign entry is a new row — all entries accumulate into period totals
-          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 600, color: "#1C1917", fontFamily: "Fraunces,Georgia,serif" }}>Data Panel</h1>
+          <p style={{ fontSize: 13, color: "#78716C", marginTop: 3 }}>Each campaign entry is a new row — all entries accumulate into period totals</p>
         </div>
       </div>
 
-      {/* Client Selector */}
       <div style={{ maxWidth: 300, marginBottom: 24 }}>
-        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#57534E", marginBottom: 5 }}>
-          Select Client
-        </label>
-        <select
-          className="input"
-          value={selectedClient}
-          onChange={(e) => {
-            setSelectedClient(e.target.value);
-            setActiveEntry(null);
-            setForm(EMPTY_ENTRY);
-          }}
-        >
+        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#57534E", marginBottom: 5 }}>Select Client</label>
+        <select className="input" value={selectedClient} onChange={(e) => { setSelectedClient(e.target.value); setActiveEntry(null); setForm(EMPTY_ENTRY); }}>
           <option value="">Choose a client...</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
+          {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
 
-      {/* Main Layout */}
       {selectedClient && (
         <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 16 }}>
-          {/* Period List Sidebar */}
-          <PeriodSidebar
-            entries={entries}
-            activeEntry={activeEntry}
-            onNewPeriod={() => {
-              setActiveEntry("new");
-              setForm(EMPTY_ENTRY);
-              setUpdates([]);
-              setExpandedSection("a");
-            }}
-            onSelectEntry={selectEntry}
-            onDeleteEntry={deleteEntry}
-          />
+          <PeriodSidebar entries={entries} activeEntry={activeEntry}
+            onNewPeriod={() => { setActiveEntry("new"); setForm(EMPTY_ENTRY); setUpdates([]); setExpandedSection("a"); }}
+            onSelectEntry={selectEntry} onDeleteEntry={deleteEntry} />
 
-          {/* Detail Panel */}
           {activeEntry ? (
             <div>
-              {/* Section A: Period & Revenue */}
-              <Section
-                id="a"
-                label="Period & Revenue Details"
-                color="#6366F1"
-                expandedSection={expandedSection}
-                onToggle={handleToggleSection}
-              >
+              <Section id="a" label="Period & Revenue Details" color="#6366F1" expandedSection={expandedSection} onToggle={handleToggleSection}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 4, marginBottom: 12 }}>
                   <div>
-                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
-                      Start Date *
-                    </label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={form.period_start}
-                      onChange={(e) => handleEntryFormChange("period_start", e.target.value)}
-                      style={{ fontSize: 13 }}
-                    />
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Start Date *</label>
+                    <input type="date" className="input" value={form.period_start} onChange={(e) => handleEntryFormChange("period_start", e.target.value)} style={{ fontSize: 13 }} />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
-                      End Date *
-                    </label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={form.period_end}
-                      onChange={(e) => handleEntryFormChange("period_end", e.target.value)}
-                      style={{ fontSize: 13 }}
-                    />
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>End Date *</label>
+                    <input type="date" className="input" value={form.period_end} onChange={(e) => handleEntryFormChange("period_end", e.target.value)} style={{ fontSize: 13 }} />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
-                      Period Label
-                    </label>
-                    <input
-                      className="input"
-                      value={form.entry_label}
-                      onChange={(e) => handleEntryFormChange("entry_label", e.target.value)}
-                      placeholder="e.g. Q1 2025"
-                      style={{ fontSize: 13 }}
-                    />
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Period Label</label>
+                    <input className="input" value={form.entry_label} onChange={(e) => handleEntryFormChange("entry_label", e.target.value)} placeholder="e.g. Q1 2025" style={{ fontSize: 13 }} />
                   </div>
                 </div>
-
-                {/* ── Totals summary row ── */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
-                  <NumField
-                    label="Total Licences"
-                    fieldKey="total_licences"
-                    form={form}
-                    onChange={(k, v) => handleEntryFormChange(k, v)}
-                  />
+                  <div>
+                    <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Total Licences</label>
+                    <input type="number" className="input" value={form.total_licences} onChange={e => handleEntryFormChange("total_licences", Number(e.target.value))} min={0} style={{ fontSize: 13 }} />
+                  </div>
                   <div>
                     <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Revenue Collected (₹)</label>
-                    <div style={{ background: "#F0FDF4", border: "1px solid #A7F3D0", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 800, color: "#16A34A" }}>
-                      ₹{(form.total_revenue_collected ?? 0).toLocaleString("en-IN")}
-                    </div>
+                    <div style={{ background: "#F0FDF4", border: "1px solid #A7F3D0", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 800, color: "#16A34A" }}>₹{(form.total_revenue_collected ?? 0).toLocaleString("en-IN")}</div>
                     <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 3 }}>Summed from lead entries below</p>
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Expected Collection (₹)</label>
-                    <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 800, color: "#D97706" }}>
-                      ₹{(form.expected_collection ?? 0).toLocaleString("en-IN")}
-                    </div>
+                    <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 15, fontWeight: 800, color: "#D97706" }}>₹{(form.expected_collection ?? 0).toLocaleString("en-IN")}</div>
                     <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 3 }}>Summed from lead expected values</p>
                   </div>
                 </div>
-
-                {/* ── Inline Lead Revenue Table ── */}
-                <LeadRevenueTable
-                  leads={leads}
-                  activeEntry={activeEntry}
-                  onSave={async (edits: Record<string, { licences: string; revenue: string; expected: string }>) => {
+                <LeadRevenueTable leads={leads} activeEntry={activeEntry}
+                  onSave={async (edits) => {
                     if (!activeEntry || activeEntry === "new") { toast.error("Save the period first"); return; }
-                    // Write each lead's values
                     for (const [id, vals] of Object.entries(edits)) {
-                      await supabase.from("leads").update({
-                        total_licences_allocated: vals.licences ? Number(vals.licences) : null,
-                        revenue_collected:         vals.revenue  ? Number(vals.revenue)  : 0,
-                        expected_revenue:          vals.expected ? Number(vals.expected) : null,
-                        updated_at: new Date().toISOString(),
-                      }).eq("id", id);
+                      await supabase.from("leads").update({ total_licences_allocated: vals.licences ? Number(vals.licences) : null, revenue_collected: vals.revenue ? Number(vals.revenue) : 0, expected_revenue: vals.expected ? Number(vals.expected) : null, updated_at: new Date().toISOString() }).eq("id", id);
                     }
-                    // Recompute period totals
-                    const { data: allLeads } = await supabase
-                      .from("leads").select("revenue_collected, expected_revenue, status").eq("client_id", selectedClient);
-                    const totalRev  = (allLeads ?? []).reduce((s: number, l: any) => s + (l.revenue_collected ?? 0), 0);
-                    const totalExp  = (allLeads ?? []).filter((l: any) => l.status !== "lost").reduce((s: number, l: any) => s + (l.expected_revenue ?? 0), 0);
-                    const totalLic  = Object.values(edits).reduce((s, v) => s + (Number(v.licences) || 0), 0);
-                    await supabase.from("data_entries").update({
-                      total_revenue_collected: totalRev,
-                      expected_collection:     totalExp,
-                      total_licences:          totalLic || form.total_licences,
-                      updated_at: new Date().toISOString(),
-                    }).eq("id", activeEntry);
+                    const { data: allLeads } = await supabase.from("leads").select("revenue_collected, expected_revenue, status").eq("client_id", selectedClient);
+                    const totalRev = (allLeads ?? []).reduce((s: number, l: any) => s + (l.revenue_collected ?? 0), 0);
+                    const totalExp = (allLeads ?? []).filter((l: any) => l.status !== "lost").reduce((s: number, l: any) => s + (l.expected_revenue ?? 0), 0);
+                    const totalLic = Object.values(edits).reduce((s, v) => s + (Number(v.licences) || 0), 0);
+                    await supabase.from("data_entries").update({ total_revenue_collected: totalRev, expected_collection: totalExp, total_licences: totalLic || form.total_licences, updated_at: new Date().toISOString() }).eq("id", activeEntry);
                     setForm(prev => ({ ...prev, total_revenue_collected: totalRev, expected_collection: totalExp }));
-                    toast.success("Revenue & licences saved");
-                    loadLeads();
-                    loadEntries();
-                  }}
-                />
+                    toast.success("Revenue & licences saved"); loadLeads(); loadEntries();
+                  }} />
               </Section>
 
-              {/* Section Notes: Campaign Notes */}
-              <Section
-                id="notes"
-                label="Campaign Notes (optional)"
-                color="#78716C"
-                expandedSection={expandedSection}
-                onToggle={handleToggleSection}
-              >
+              <Section id="notes" label="Campaign Notes (optional)" color="#78716C" expandedSection={expandedSection} onToggle={handleToggleSection}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 4 }}>
-                  {(
-                    [
-                      ["Email Notes", "email_summary"],
-                      ["WhatsApp Notes", "whatsapp_summary"],
-                      ["Calls Notes", "calls_summary"],
-                    ] as [string, keyof EntryForm][]
-                  ).map(([label, key]) => (
+                  {([["Email Notes", "email_summary"], ["WhatsApp Notes", "whatsapp_summary"], ["Calls Notes", "calls_summary"]] as [string, keyof EntryForm][]).map(([label, key]) => (
                     <div key={key}>
-                      <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>
-                        {label}
-                      </label>
-                      <textarea
-                        className="input"
-                        rows={3}
-                        value={form[key] as string}
-                        onChange={(e) => handleEntryFormChange(key, e.target.value)}
-                        style={{ resize: "none", fontSize: 13 }}
-                      />
+                      <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>{label}</label>
+                      <textarea className="input" rows={3} value={form[key] as string} onChange={(e) => handleEntryFormChange(key, e.target.value)} style={{ resize: "none", fontSize: 13 }} />
                     </div>
                   ))}
                 </div>
               </Section>
 
-              {/* Save Button */}
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-                <button onClick={saveEntry} disabled={saving} className="btn-primary">
-                  <Save size={14} />
-                  {saving ? "Saving..." : "Save Period"}
-                </button>
+                <button onClick={saveEntry} disabled={saving} className="btn-primary"><Save size={14} />{saving ? "Saving..." : "Save Period"}</button>
               </div>
 
-              {/* Campaign Data Entries */}
               {activeEntry && activeEntry !== "new" && (
-                <CampaignDataSection
-                  updates={updates}
-                  accumulated={accumulated}
-                  showUpdateForm={showUpdateForm}
-                  newUpdate={newUpdate}
-                  onToggleForm={() => setShowUpdateForm(true)}
-                  onCancelForm={() => setShowUpdateForm(false)}
-                  onUpdateFormChange={handleUpdateFormChange}
-                  onSaveUpdate={saveCampaignUpdate}
-                  onDeleteUpdate={deleteUpdate}
-                />
+                <CampaignDataSection updates={updates} accumulated={accumulated} showUpdateForm={showUpdateForm} newUpdate={newUpdate}
+                  onToggleForm={() => setShowUpdateForm(true)} onCancelForm={() => setShowUpdateForm(false)}
+                  onUpdateFormChange={handleUpdateFormChange} onSaveUpdate={saveCampaignUpdate} onDeleteUpdate={deleteUpdate} />
               )}
 
-              {/* Leads */}
-              <LeadsSection
-                leads={leads}
-                activeEntry={activeEntry}
-                showLeadForm={showLeadForm}
-                newLead={newLead}
-                onToggleForm={() => setShowLeadForm(true)}
-                onCancelForm={() => setShowLeadForm(false)}
-                onLeadFormChange={handleLeadFormChange}
-                onSaveLead={saveLead}
-                onDeleteLead={deleteLead}
-                onUpdateLeadStatus={updateLeadStatus}
-              />
+              <LeadsSection leads={leads} activeEntry={activeEntry} showLeadForm={showLeadForm} newLead={newLead}
+                onToggleForm={() => setShowLeadForm(true)} onCancelForm={() => setShowLeadForm(false)}
+                onLeadFormChange={handleLeadFormChange} onSaveLead={saveLead} onDeleteLead={deleteLead} onUpdateLeadStatus={updateLeadStatus} />
             </div>
           ) : (
             <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 10, padding: "60px 0", textAlign: "center" }}>
@@ -867,157 +432,63 @@ export default function DataPanelPage() {
         </div>
       )}
 
-      {/* ═══ REVENUE MODAL ═══ */}
+      {/* Revenue Modal */}
       {showRevenueModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {/* Backdrop */}
-          <div
-            onClick={() => setShowRevenueModal(false)}
-            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }}
-          />
-          {/* Modal */}
+          <div onClick={() => setShowRevenueModal(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }} />
           <div style={{ position: "relative", background: "#fff", borderRadius: 16, width: "min(680px, 95vw)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.25)", overflow: "hidden" }}>
-            {/* Header */}
             <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #F0EEEC", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
               <div>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1C1917", margin: 0 }}>
-                  💰 Revenue Entry — via Leads
-                </h2>
-                <p style={{ fontSize: 12.5, color: "#78716C", marginTop: 4 }}>
-                  Search and select a lead, then enter the revenue collected from that lead. Period totals update automatically.
-                </p>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1C1917", margin: 0 }}>💰 Revenue Entry — via Leads</h2>
+                <p style={{ fontSize: 12.5, color: "#78716C", marginTop: 4 }}>Search a lead, enter revenue collected. Period totals update automatically.</p>
               </div>
-              <button
-                onClick={() => setShowRevenueModal(false)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, borderRadius: 8, display: "flex" }}
-              >
-                <X size={18} color="#78716C" />
-              </button>
+              <button onClick={() => setShowRevenueModal(false)} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, borderRadius: 8, display: "flex" }}><X size={18} color="#78716C" /></button>
             </div>
-
-            {/* Search */}
             <div style={{ padding: "14px 24px 10px", borderBottom: "1px solid #F5F4F0", flexShrink: 0 }}>
               <div style={{ position: "relative" }}>
                 <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "#A8A29E" }} />
-                <input
-                  type="text"
-                  value={revenueSearch}
-                  onChange={(e) => setRevenueSearch(e.target.value)}
-                  placeholder="Search leads by name, country, state, location, status..."
-                  autoFocus
-                  style={{ width: "100%", paddingLeft: 34, padding: "9px 14px 9px 34px", border: "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                />
+                <input type="text" value={revenueSearch} onChange={(e) => setRevenueSearch(e.target.value)} placeholder="Search leads..." autoFocus
+                  style={{ width: "100%", padding: "9px 14px 9px 34px", border: "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
               </div>
               <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
-                <span style={{ fontSize: 11.5, color: "#78716C" }}>
-                  Total entered:{" "}
-                  <strong style={{ color: "#16A34A" }}>
-                    ₹{revenueTotal.toLocaleString("en-IN")}
-                  </strong>
-                </span>
-                <span style={{ fontSize: 11.5, color: "#78716C" }}>
-                  <strong style={{ color: "#E8611A" }}>{revenueLeadCount}</strong> leads with revenue
-                </span>
-                <span style={{ fontSize: 11.5, color: "#A8A29E" }}>{allClientLeads.length} leads total</span>
+                <span style={{ fontSize: 11.5, color: "#78716C" }}>Total: <strong style={{ color: "#16A34A" }}>₹{revenueTotal.toLocaleString("en-IN")}</strong></span>
+                <span style={{ fontSize: 11.5, color: "#78716C" }}><strong style={{ color: "#E8611A" }}>{revenueLeadCount}</strong> leads with revenue</span>
+                <span style={{ fontSize: 11.5, color: "#A8A29E" }}>{allClientLeads.length} total</span>
               </div>
             </div>
-
-            {/* Lead List */}
             <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
-              {filteredModalLeads.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 0", color: "#A8A29E", fontSize: 13 }}>
-                  No leads match your search
-                </div>
-              ) : (
-                filteredModalLeads.map((lead) => {
-                  const hasRevenue = revenueEdits[lead.id] !== undefined && Number(revenueEdits[lead.id]) > 0;
-                  const sc = STATUS_STYLE[lead.status] ?? { bg: "#F5F4F0", text: "#78716C" };
-                  return (
-                    <div
-                      key={lead.id}
-                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 24px", borderBottom: "1px solid #FAFAF9", background: hasRevenue ? "#F0FDF4" : "transparent", transition: "background 0.1s" }}
-                    >
-                      {/* Lead info */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "#1C1917", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {lead.name}
-                          </span>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 8, background: sc.bg, color: sc.text, flexShrink: 0 }}>
-                            {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-                          </span>
-                          {hasRevenue && (
-                            <span style={{ fontSize: 10, fontWeight: 700, background: "#DCFCE7", color: "#15803D", padding: "1px 6px", borderRadius: 6, flexShrink: 0 }}>✓</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 11.5, color: "#A8A29E", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {lead.country && <span>{lead.country}</span>}
-                          {lead.state && <span>{lead.state}</span>}
-                          {lead.location && <span>{lead.location}</span>}
-                          {lead.expected_revenue != null && lead.expected_revenue > 0 && (
-                            <span style={{ color: "#D97706" }}>Expected: ₹{lead.expected_revenue.toLocaleString("en-IN")}</span>
-                          )}
-                          {lead.cycle_label && <span>· {lead.cycle_label}</span>}
-                        </div>
+              {filteredModalLeads.map(lead => {
+                const hasRev = revenueEdits[lead.id] !== undefined && Number(revenueEdits[lead.id]) > 0;
+                const sc2 = STATUS_STYLE[lead.status] ?? { bg: "#F5F4F0", text: "#78716C" };
+                return (
+                  <div key={lead.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 24px", borderBottom: "1px solid #FAFAF9", background: hasRev ? "#F0FDF4" : "transparent" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#1C1917", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lead.name}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 8, background: sc2.bg, color: sc2.text, flexShrink: 0 }}>{lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}</span>
+                        {hasRev && <span style={{ fontSize: 10, fontWeight: 700, background: "#DCFCE7", color: "#15803D", padding: "1px 6px", borderRadius: 6 }}>✓</span>}
                       </div>
-
-                      {/* Revenue input */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                        <span style={{ fontSize: 12, color: "#78716C", fontWeight: 500 }}>₹</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={revenueEdits[lead.id] ?? ""}
-                          placeholder="0"
-                          onChange={(e) =>
-                            setRevenueEdits((prev) => ({ ...prev, [lead.id]: e.target.value }))
-                          }
-                          style={{ width: 120, padding: "7px 10px", border: hasRevenue ? "1.5px solid #16A34A" : "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", background: hasRevenue ? "#F0FDF4" : "#fff", fontWeight: hasRevenue ? 600 : 400, color: "#1C1917", textAlign: "right" }}
-                        />
-                        {hasRevenue && (
-                          <button
-                            onClick={() =>
-                              setRevenueEdits((prev) => {
-                                const n = { ...prev };
-                                delete n[lead.id];
-                                return n;
-                              })
-                            }
-                            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 3, borderRadius: 5, display: "flex", color: "#A8A29E" }}
-                          >
-                            <X size={13} />
-                          </button>
-                        )}
+                      <div style={{ fontSize: 11.5, color: "#A8A29E", display: "flex", gap: 8 }}>
+                        {lead.country && <span>{lead.country}</span>}{lead.state && <span>{lead.state}</span>}
+                        {lead.expected_revenue != null && lead.expected_revenue > 0 && <span style={{ color: "#D97706" }}>Expected: ₹{lead.expected_revenue.toLocaleString("en-IN")}</span>}
                       </div>
                     </div>
-                  );
-                })
-              )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, color: "#78716C" }}>₹</span>
+                      <input type="number" min="0" value={revenueEdits[lead.id] ?? ""} placeholder="0"
+                        onChange={e => setRevenueEdits(prev => ({ ...prev, [lead.id]: e.target.value }))}
+                        style={{ width: 120, padding: "7px 10px", border: hasRev ? "1.5px solid #16A34A" : "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", background: hasRev ? "#F0FDF4" : "#fff", fontWeight: hasRev ? 600 : 400, textAlign: "right" }} />
+                      {hasRev && <button onClick={() => setRevenueEdits(prev => { const n = { ...prev }; delete n[lead.id]; return n; })} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 3 }}><X size={13} /></button>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            {/* Footer */}
             <div style={{ padding: "14px 24px", borderTop: "1px solid #F0EEEC", display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-              <div style={{ fontSize: 12.5, color: "#78716C" }}>
-                Period total will become:{" "}
-                <strong style={{ color: "#16A34A", fontSize: 14 }}>
-                  ₹{revenueTotal.toLocaleString("en-IN")}
-                </strong>
-                <span style={{ fontSize: 11, color: "#A8A29E", marginLeft: 10 }}>
-                  updates period & all dashboards
-                </span>
-              </div>
+              <div style={{ fontSize: 12.5, color: "#78716C" }}>Period total: <strong style={{ color: "#16A34A", fontSize: 14 }}>₹{revenueTotal.toLocaleString("en-IN")}</strong></div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => setShowRevenueModal(false)}
-                  style={{ padding: "8px 18px", border: "1px solid #E7E5E4", borderRadius: 8, background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", color: "#78716C" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveRevenueToLeads}
-                  disabled={savingRevenue}
-                  style={{ padding: "8px 22px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: savingRevenue ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: savingRevenue ? 0.7 : 1 }}
-                >
+                <button onClick={() => setShowRevenueModal(false)} style={{ padding: "8px 18px", border: "1px solid #E7E5E4", borderRadius: 8, background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", color: "#78716C" }}>Cancel</button>
+                <button onClick={saveRevenueToLeads} disabled={savingRevenue} style={{ padding: "8px 22px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: savingRevenue ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: savingRevenue ? 0.7 : 1 }}>
                   {savingRevenue ? "Saving..." : "💾 Save Revenue"}
                 </button>
               </div>
@@ -1029,216 +500,111 @@ export default function DataPanelPage() {
   );
 }
 
-// ─── Lead Revenue Table ──────────────────────────────────────────────────────────
-
+// ─── LeadRevenueTable ─────────────────────────────────────────────────────────
 interface LeadRevenueTableProps {
-  leads: Lead[];
-  activeEntry: string | null;
+  leads: Lead[]; activeEntry: string | null;
   onSave: (edits: Record<string, { licences: string; revenue: string; expected: string }>) => Promise<void>;
 }
-
 function LeadRevenueTable({ leads, activeEntry, onSave }: LeadRevenueTableProps) {
   const [edits, setEdits] = useState<Record<string, { licences: string; revenue: string; expected: string }>>({});
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
-
-  // Reset edits when leads change
   useEffect(() => {
     const init: Record<string, { licences: string; revenue: string; expected: string }> = {};
-    leads.forEach(l => {
-      init[l.id] = {
-        licences: l.total_licences_allocated != null ? String(l.total_licences_allocated) : "",
-        revenue:  l.revenue_collected != null && l.revenue_collected > 0 ? String(l.revenue_collected) : "",
-        expected: l.expected_revenue  != null ? String(l.expected_revenue)  : "",
-      };
-    });
+    leads.forEach(l => { init[l.id] = { licences: l.total_licences_allocated != null ? String(l.total_licences_allocated) : "", revenue: l.revenue_collected != null && l.revenue_collected > 0 ? String(l.revenue_collected) : "", expected: l.expected_revenue != null ? String(l.expected_revenue) : "" }; });
     setEdits(init);
   }, [leads]);
-
-  const filtered = leads.filter(l => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return l.name.toLowerCase().includes(q) || (l.location ?? "").toLowerCase().includes(q) || (l.status ?? "").toLowerCase().includes(q);
-  });
-
-  const totalRevenue  = Object.values(edits).reduce((s, v) => s + (Number(v.revenue)  || 0), 0);
+  const filtered = leads.filter(l => { if (!search) return true; const q = search.toLowerCase(); return l.name.toLowerCase().includes(q) || (l.location ?? "").toLowerCase().includes(q); });
+  const totalRevenue = Object.values(edits).reduce((s, v) => s + (Number(v.revenue) || 0), 0);
   const totalExpected = Object.values(edits).reduce((s, v) => s + (Number(v.expected) || 0), 0);
   const totalLicences = Object.values(edits).reduce((s, v) => s + (Number(v.licences) || 0), 0);
-
   const STATUS_DOT: Record<string, string> = { new:"#6366F1", contacted:"#F59E0B", qualified:"#F97316", proposal:"#8B5CF6", negotiation:"#F59E0B", won:"#16A34A", lost:"#EF4444" };
-
-  async function handleSave() {
-    setSaving(true);
-    await onSave(edits);
-    setSaving(false);
-  }
-
-  if (leads.length === 0) return (
-    <div style={{ background: "#FAFAF9", border: "1px dashed #E7E5E4", borderRadius: 10, padding: "20px 0", textAlign: "center", color: "#A8A29E", fontSize: 13 }}>
-      Add leads below to set revenue per lead
-    </div>
-  );
-
+  async function handleSave() { setSaving(true); await onSave(edits); setSaving(false); }
+  if (leads.length === 0) return <div style={{ background: "#FAFAF9", border: "1px dashed #E7E5E4", borderRadius: 10, padding: "20px 0", textAlign: "center", color: "#A8A29E", fontSize: 13 }}>Add leads below to set revenue per lead</div>;
   return (
     <div style={{ border: "1px solid #E7E5E4", borderRadius: 10, overflow: "hidden" }}>
-      {/* Header */}
       <div style={{ background: "#F9F8F7", padding: "12px 16px", borderBottom: "1px solid #F0EEEC", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div>
           <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>💰 Revenue & Licences per Lead</p>
-          <p style={{ fontSize: 11.5, color: "#78716C", marginTop: 2 }}>Select leads and enter revenue collected, expected, and licences. Totals update the period automatically.</p>
+          <p style={{ fontSize: 11.5, color: "#78716C", marginTop: 2 }}>Enter revenue, expected, and licences. Totals update the period automatically.</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {/* Live totals */}
           <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#78716C" }}>
-            <span>🏦 <strong style={{ color: "#16A34A" }}>₹{totalRevenue.toLocaleString("en-IN")}</strong> collected</span>
-            <span>🔮 <strong style={{ color: "#D97706" }}>₹{totalExpected.toLocaleString("en-IN")}</strong> expected</span>
-            <span>📦 <strong style={{ color: "#0891B2" }}>{totalLicences.toLocaleString("en-IN")}</strong> licences</span>
+            <span>🏦 <strong style={{ color: "#16A34A" }}>₹{totalRevenue.toLocaleString("en-IN")}</strong></span>
+            <span>🔮 <strong style={{ color: "#D97706" }}>₹{totalExpected.toLocaleString("en-IN")}</strong></span>
+            <span>📦 <strong style={{ color: "#0891B2" }}>{totalLicences}</strong></span>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={saving || !activeEntry || activeEntry === "new"}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.7 : 1, whiteSpace: "nowrap" }}>
+          <button onClick={handleSave} disabled={saving || !activeEntry || activeEntry === "new"}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.7 : 1 }}>
             <Save size={13} /> {saving ? "Saving..." : "Save All"}
           </button>
         </div>
       </div>
-
-      {/* Search */}
       {leads.length > 5 && (
-        <div style={{ padding: "8px 16px", borderBottom: "1px solid #F5F4F0", background: "#fff" }}>
+        <div style={{ padding: "8px 16px", borderBottom: "1px solid #F5F4F0" }}>
           <div style={{ position: "relative" }}>
             <Search size={13} style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#A8A29E" }} />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leads..."
-              style={{ width: "100%", paddingLeft: 28, padding: "6px 10px 6px 28px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 12.5, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leads..." style={{ width: "100%", padding: "6px 10px 6px 28px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 12.5, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
           </div>
         </div>
       )}
-
-      {/* Table */}
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
-              {["Lead", "Status", "Location", "Licences", "Revenue Collected (₹)", "Expected Revenue (₹)"].map(h => (
-                <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11, fontWeight: 700, color: "#A8A29E", whiteSpace: "nowrap" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
+          <thead><tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
+            {["Lead","Status","Location","Licences","Revenue Collected (₹)","Expected Revenue (₹)"].map(h => <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11, fontWeight: 700, color: "#A8A29E", whiteSpace: "nowrap" }}>{h}</th>)}
+          </tr></thead>
           <tbody>
             {filtered.map(lead => {
               const e = edits[lead.id] ?? { licences: "", revenue: "", expected: "" };
-              const hasRevenue = Number(e.revenue) > 0;
-              const sc = STATUS_DOT[lead.status] ?? "#A8A29E";
+              const hasRev = Number(e.revenue) > 0;
               return (
-                <tr key={lead.id} style={{ borderBottom: "1px solid #F5F4F0", background: hasRevenue ? "#F0FDF4" : "transparent", transition: "background 0.1s" }}>
-                  <td style={{ padding: "10px 12px" }}>
-                    <p style={{ fontWeight: 600, color: "#1C1917" }}>{lead.name}</p>
-                    {(lead.country || lead.state) && <p style={{ fontSize: 11, color: "#A8A29E", marginTop: 1 }}>{[lead.country, lead.state].filter(Boolean).join(", ")}</p>}
-                  </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc, display: "inline-block" }} />
-                      {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-                    </span>
-                  </td>
+                <tr key={lead.id} style={{ borderBottom: "1px solid #F5F4F0", background: hasRev ? "#F0FDF4" : "transparent" }}>
+                  <td style={{ padding: "10px 12px" }}><p style={{ fontWeight: 600, color: "#1C1917" }}>{lead.name}</p>{(lead.country || lead.state) && <p style={{ fontSize: 11, color: "#A8A29E" }}>{[lead.country, lead.state].filter(Boolean).join(", ")}</p>}</td>
+                  <td style={{ padding: "10px 12px" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: STATUS_DOT[lead.status] ?? "#A8A29E", display: "inline-block" }} />{lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}</span></td>
                   <td style={{ padding: "10px 12px", color: "#78716C", fontSize: 12.5 }}>{lead.location || "—"}</td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <input type="number" min="0" value={e.licences} placeholder="0"
-                      onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], licences: ev.target.value } }))}
-                      style={{ width: 90, padding: "6px 9px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right" }} />
-                  </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ fontSize: 12, color: "#78716C" }}>₹</span>
-                      <input type="number" min="0" value={e.revenue} placeholder="0"
-                        onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], revenue: ev.target.value } }))}
-                        style={{ width: 120, padding: "6px 9px", border: hasRevenue ? "1.5px solid #16A34A" : "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right", background: hasRevenue ? "#F0FDF4" : "#fff", fontWeight: hasRevenue ? 700 : 400 }} />
-                    </div>
-                  </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ fontSize: 12, color: "#78716C" }}>₹</span>
-                      <input type="number" min="0" value={e.expected} placeholder="0"
-                        onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], expected: ev.target.value } }))}
-                        style={{ width: 120, padding: "6px 9px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right" }} />
-                    </div>
-                  </td>
+                  <td style={{ padding: "10px 12px" }}><input type="number" min="0" value={e.licences} placeholder="0" onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], licences: ev.target.value } }))} style={{ width: 90, padding: "6px 9px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right" }} /></td>
+                  <td style={{ padding: "10px 12px" }}><div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 12, color: "#78716C" }}>₹</span><input type="number" min="0" value={e.revenue} placeholder="0" onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], revenue: ev.target.value } }))} style={{ width: 120, padding: "6px 9px", border: hasRev ? "1.5px solid #16A34A" : "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right", background: hasRev ? "#F0FDF4" : "#fff", fontWeight: hasRev ? 700 : 400 }} /></div></td>
+                  <td style={{ padding: "10px 12px" }}><div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 12, color: "#78716C" }}>₹</span><input type="number" min="0" value={e.expected} placeholder="0" onChange={ev => setEdits(p => ({ ...p, [lead.id]: { ...p[lead.id], expected: ev.target.value } }))} style={{ width: 120, padding: "6px 9px", border: "1px solid #E7E5E4", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", textAlign: "right" }} /></div></td>
                 </tr>
               );
             })}
           </tbody>
-          {/* Totals footer */}
-          <tfoot>
-            <tr style={{ background: "#F9F8F7", borderTop: "2px solid #E7E5E4" }}>
-              <td colSpan={3} style={{ padding: "10px 12px", fontSize: 12, fontWeight: 700, color: "#1C1917" }}>Totals ({filtered.length} leads)</td>
-              <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#0891B2", textAlign: "right", paddingRight: 32 }}>{totalLicences > 0 ? totalLicences.toLocaleString("en-IN") : "—"}</td>
-              <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#16A34A", paddingLeft: 28 }}>{totalRevenue > 0 ? `₹${totalRevenue.toLocaleString("en-IN")}` : "—"}</td>
-              <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#D97706", paddingLeft: 28 }}>{totalExpected > 0 ? `₹${totalExpected.toLocaleString("en-IN")}` : "—"}</td>
-            </tr>
-          </tfoot>
+          <tfoot><tr style={{ background: "#F9F8F7", borderTop: "2px solid #E7E5E4" }}>
+            <td colSpan={3} style={{ padding: "10px 12px", fontSize: 12, fontWeight: 700, color: "#1C1917" }}>Totals ({filtered.length} leads)</td>
+            <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#0891B2", textAlign: "right", paddingRight: 32 }}>{totalLicences > 0 ? totalLicences : "—"}</td>
+            <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#16A34A", paddingLeft: 28 }}>{totalRevenue > 0 ? `₹${totalRevenue.toLocaleString("en-IN")}` : "—"}</td>
+            <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 800, color: "#D97706", paddingLeft: 28 }}>{totalExpected > 0 ? `₹${totalExpected.toLocaleString("en-IN")}` : "—"}</td>
+          </tr></tfoot>
         </table>
       </div>
     </div>
   );
 }
 
-// ─── Period Sidebar ───────────────────────────────────────────────────────────
-
+// ─── PeriodSidebar ────────────────────────────────────────────────────────────
 interface PeriodSidebarProps {
-  entries: DataEntry[];
-  activeEntry: string | null;
-  onNewPeriod: () => void;
-  onSelectEntry: (entry: DataEntry) => void;
-  onDeleteEntry: (id: string) => void;
+  entries: DataEntry[]; activeEntry: string | null;
+  onNewPeriod: () => void; onSelectEntry: (e: DataEntry) => void; onDeleteEntry: (id: string) => void;
 }
-
 function PeriodSidebar({ entries, activeEntry, onNewPeriod, onSelectEntry, onDeleteEntry }: PeriodSidebarProps) {
   return (
     <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 10, overflow: "hidden", height: "fit-content" }}>
       <div style={{ padding: "12px 14px", borderBottom: "1px solid #F5F4F0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FAFAF9" }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: "#1C1917" }}>Periods</span>
-        <button
-          onClick={onNewPeriod}
-          style={{ width: 26, height: 26, borderRadius: 7, background: "#E8611A", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          <Plus size={13} color="#fff" />
-        </button>
+        <button onClick={onNewPeriod} style={{ width: 26, height: 26, borderRadius: 7, background: "#E8611A", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={13} color="#fff" /></button>
       </div>
-
-      {entries.length === 0 && activeEntry !== "new" && (
-        <p style={{ fontSize: 12.5, textAlign: "center", padding: "24px 0", color: "#A8A29E" }}>No periods yet</p>
-      )}
-
-      {activeEntry === "new" && (
-        <div style={{ padding: "10px 14px", borderLeft: "3px solid #E8611A", background: "#FFF7ED" }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: "#E8611A" }}>+ New Period</p>
-        </div>
-      )}
-
-      {entries.map((entry) => {
+      {entries.length === 0 && activeEntry !== "new" && <p style={{ fontSize: 12.5, textAlign: "center", padding: "24px 0", color: "#A8A29E" }}>No periods yet</p>}
+      {activeEntry === "new" && <div style={{ padding: "10px 14px", borderLeft: "3px solid #E8611A", background: "#FFF7ED" }}><p style={{ fontSize: 13, fontWeight: 600, color: "#E8611A" }}>+ New Period</p></div>}
+      {entries.map(entry => {
         const isActive = activeEntry === entry.id;
-        const label =
-          entry.entry_label ||
-          `${new Date(entry.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" })} – ${new Date(entry.period_end).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "2-digit" })}`;
+        const label = entry.entry_label || `${new Date(entry.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" })} – ${new Date(entry.period_end).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "2-digit" })}`;
         return (
           <div key={entry.id} style={{ position: "relative", borderBottom: "1px solid #F5F4F0" }}>
-            <button
-              onClick={() => onSelectEntry(entry)}
-              style={{ width: "100%", textAlign: "left", padding: "10px 36px 10px 14px", borderLeft: `3px solid ${isActive ? "#E8611A" : "transparent"}`, background: isActive ? "#FFF7ED" : "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-            >
+            <button onClick={() => onSelectEntry(entry)} style={{ width: "100%", textAlign: "left", padding: "10px 36px 10px 14px", borderLeft: `3px solid ${isActive ? "#E8611A" : "transparent"}`, background: isActive ? "#FFF7ED" : "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
               <p style={{ fontSize: 12.5, fontWeight: 600, color: "#1C1917" }}>{label}</p>
-              <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>
-                {entry.total_revenue_collected ? fmtINR(entry.total_revenue_collected) : "₹0"} · {entry.total_licences ?? 0} lic
-              </p>
+              <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 2 }}>{entry.total_revenue_collected ? fmtINR(entry.total_revenue_collected) : "₹0"} · {entry.total_licences ?? 0} lic</p>
             </button>
-            <button
-              onClick={() => onDeleteEntry(entry.id)}
-              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", padding: "4px 5px", borderRadius: 5, display: "flex" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#FEE2E2")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <Trash2 size={12} color="#EF4444" />
-            </button>
+            <button onClick={() => onDeleteEntry(entry.id)} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", padding: "4px 5px", borderRadius: 5, display: "flex" }} onMouseEnter={e => (e.currentTarget.style.background = "#FEE2E2")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}><Trash2 size={12} color="#EF4444" /></button>
           </div>
         );
       })}
@@ -1246,68 +612,65 @@ function PeriodSidebar({ entries, activeEntry, onNewPeriod, onSelectEntry, onDel
   );
 }
 
-// ─── Campaign Data Section ────────────────────────────────────────────────────
-
+// ─── CampaignDataSection ──────────────────────────────────────────────────────
 interface AccumulatedTotals {
   emailSent: number; emailOpened: number; emailClicked: number;
   waSent: number; waDelivered: number; waReplied: number;
   callsMade: number; callsConnected: number; callsConverted: number;
+  followUpCallsMade: number; demoScheduled: number; demoCompleted: number;
+  demoRescheduled: number; followUpMeetingDone: number;
 }
-
 interface CampaignDataSectionProps {
-  updates: CampaignUpdate[];
-  accumulated: AccumulatedTotals;
-  showUpdateForm: boolean;
-  newUpdate: UpdateForm;
-  onToggleForm: () => void;
-  onCancelForm: () => void;
+  updates: CampaignUpdate[]; accumulated: AccumulatedTotals;
+  showUpdateForm: boolean; newUpdate: UpdateForm;
+  onToggleForm: () => void; onCancelForm: () => void;
   onUpdateFormChange: (key: keyof UpdateForm, value: string | number) => void;
-  onSaveUpdate: () => void;
-  onDeleteUpdate: (id: string) => void;
+  onSaveUpdate: () => void; onDeleteUpdate: (id: string) => void;
 }
-
 function CampaignDataSection({ updates, accumulated, showUpdateForm, newUpdate, onToggleForm, onCancelForm, onUpdateFormChange, onSaveUpdate, onDeleteUpdate }: CampaignDataSectionProps) {
-  const channelBadgeStyle = (channel: string) => ({
-    padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600 as const,
-    background: channel === "email" ? "#DBEAFE" : channel === "whatsapp" ? "#DCFCE7" : "#EDE9FE",
-    color: channel === "email" ? "#1D4ED8" : channel === "whatsapp" ? "#15803D" : "#6D28D9",
-  });
+  const channelBadge = (ch: string) => ({ padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600 as const, background: ch === "email" ? "#DBEAFE" : ch === "whatsapp" ? "#DCFCE7" : "#EDE9FE", color: ch === "email" ? "#1D4ED8" : ch === "whatsapp" ? "#15803D" : "#6D28D9" });
 
-  const channelFields: Record<string, [string, keyof UpdateForm][]> = {
-    email: [["Sent", "email_sent"], ["Opened", "email_opened"], ["Clicked", "email_clicked"]],
-    whatsapp: [["Sent", "whatsapp_sent"], ["Delivered", "whatsapp_delivered"], ["Replied", "whatsapp_replied"]],
-    calls: [["Made", "calls_made"], ["Connected", "calls_connected"], ["Converted", "calls_converted"]],
-  };
+  const emailFields: [string, keyof UpdateForm][] = [["Sent","email_sent"],["Opened","email_opened"],["Clicked","email_clicked"]];
+  const waFields: [string, keyof UpdateForm][] = [["Sent","whatsapp_sent"],["Delivered","whatsapp_delivered"],["Replied","whatsapp_replied"]];
 
   const totalCards = [
-    { title: "📧 EMAIL", color: "#1D4ED8", bg: "#EFF6FF", bd: "#BFDBFE", items: [["Sent", accumulated.emailSent, 0], ["Opened", accumulated.emailOpened, accumulated.emailSent], ["Clicked", accumulated.emailClicked, accumulated.emailSent]] as [string, number, number][] },
-    { title: "💬 WHATSAPP", color: "#15803D", bg: "#F0FDF4", bd: "#A7F3D0", items: [["Sent", accumulated.waSent, 0], ["Delivered", accumulated.waDelivered, accumulated.waSent], ["Replied", accumulated.waReplied, accumulated.waSent]] as [string, number, number][] },
-    { title: "📞 CALLS", color: "#6D28D9", bg: "#F5F3FF", bd: "#DDD6FE", items: [["Made", accumulated.callsMade, 0], ["Connected", accumulated.callsConnected, accumulated.callsMade], ["Converted", accumulated.callsConverted, accumulated.callsMade]] as [string, number, number][] },
+    { title: "📧 EMAIL", color: "#1D4ED8", bg: "#EFF6FF", bd: "#BFDBFE", items: [["Sent", accumulated.emailSent, 0], ["Opened", accumulated.emailOpened, accumulated.emailSent], ["Clicked", accumulated.emailClicked, accumulated.emailSent]] as [string,number,number][] },
+    { title: "💬 WHATSAPP", color: "#15803D", bg: "#F0FDF4", bd: "#A7F3D0", items: [["Sent", accumulated.waSent, 0], ["Delivered", accumulated.waDelivered, accumulated.waSent], ["Replied", accumulated.waReplied, accumulated.waSent]] as [string,number,number][] },
+    { title: "📞 CALLS", color: "#6D28D9", bg: "#F5F3FF", bd: "#DDD6FE", items: [
+      ["New Calls Made", accumulated.callsMade, 0],
+      ["Follow Up Call Made", accumulated.followUpCallsMade, 0],
+      ["Demo Scheduled", accumulated.demoScheduled, 0],
+      ["Demo Completed", accumulated.demoCompleted, accumulated.demoScheduled],
+      ["Demo Rescheduled", accumulated.demoRescheduled, accumulated.demoScheduled],
+      ["Follow Up Meeting Done", accumulated.followUpMeetingDone, 0],
+      ["Connected", accumulated.callsConnected, accumulated.callsMade],
+      ["Converted", accumulated.callsConverted, accumulated.callsMade],
+    ] as [string,number,number][] },
   ];
+
+  // Map CALL_METRICS key → accumulated field
+  const callMetricValue: Record<string, number> = {
+    calls_made: accumulated.callsMade, follow_up_calls_made: accumulated.followUpCallsMade,
+    demo_scheduled: accumulated.demoScheduled, demo_completed: accumulated.demoCompleted,
+    demo_rescheduled: accumulated.demoRescheduled, follow_up_meeting_done: accumulated.followUpMeetingDone,
+  };
 
   return (
     <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 10, padding: 16, marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <div>
-          <h3 style={{ fontSize: 13.5, fontWeight: 600, color: "#1C1917" }}>
-            Campaign Data Entries{" "}
-            <span style={{ fontSize: 12, color: "#A8A29E", fontWeight: 400 }}>({updates.length} rows)</span>
-          </h3>
-          <p style={{ fontSize: 11.5, color: "#78716C", marginTop: 2 }}>
-            Each row is independent. All rows are accumulated into totals below.
-          </p>
+          <h3 style={{ fontSize: 13.5, fontWeight: 600, color: "#1C1917" }}>Campaign Data Entries <span style={{ fontSize: 12, color: "#A8A29E", fontWeight: 400 }}>({updates.length} rows)</span></h3>
+          <p style={{ fontSize: 11.5, color: "#78716C", marginTop: 2 }}>Each row is independent — all rows accumulate into totals below.</p>
         </div>
-        <button onClick={onToggleForm} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }}>
-          <Plus size={12} /> Add Entry
-        </button>
+        <button onClick={onToggleForm} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }}><Plus size={12} /> Add Entry</button>
       </div>
 
       {showUpdateForm && (
         <div style={{ background: "#F9F8F7", border: "1px solid #E7E5E4", borderRadius: 8, padding: 14, marginBottom: 12 }}>
-          <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
             <div>
               <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Channel</label>
-              <select className="input" value={newUpdate.channel} onChange={(e) => onUpdateFormChange("channel", e.target.value)} style={{ fontSize: 13 }}>
+              <select className="input" value={newUpdate.channel} onChange={e => onUpdateFormChange("channel", e.target.value)} style={{ fontSize: 13 }}>
                 <option value="email">📧 Email</option>
                 <option value="whatsapp">💬 WhatsApp</option>
                 <option value="calls">📞 Calls</option>
@@ -1315,16 +678,44 @@ function CampaignDataSection({ updates, accumulated, showUpdateForm, newUpdate, 
             </div>
             <div>
               <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Date</label>
-              <input type="date" className="input" value={newUpdate.update_date} onChange={(e) => onUpdateFormChange("update_date", e.target.value)} style={{ fontSize: 13 }} />
+              <input type="date" className="input" value={newUpdate.update_date} onChange={e => onUpdateFormChange("update_date", e.target.value)} style={{ fontSize: 13 }} />
             </div>
-            {channelFields[newUpdate.channel].map(([label, key]) => (
-              <div key={key}>
-                <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>{label}</label>
-                <input type="number" className="input" value={newUpdate[key] as number} onChange={(e) => onUpdateFormChange(key, Number(e.target.value))} style={{ fontSize: 13, width: 90 }} />
-              </div>
-            ))}
           </div>
-          <textarea className="input" rows={2} placeholder="Notes..." value={newUpdate.notes} onChange={(e) => onUpdateFormChange("notes", e.target.value)} style={{ resize: "none", fontSize: 13, marginBottom: 10 }} />
+
+          {newUpdate.channel === "calls" ? (
+            <div style={{ background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: "#6D28D9", marginBottom: 10 }}>📞 Call Activity — enter counts for each activity type</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {CALL_METRICS.map(({ key, label, icon, color, bg }) => (
+                  <div key={key} style={{ background: "#fff", border: `1px solid ${color}35`, borderRadius: 9, padding: "10px 12px" }}>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 700, color, marginBottom: 6 }}>{icon} {label}</label>
+                    <input type="number" className="input" min={0} value={(newUpdate as any)[key] ?? 0}
+                      onChange={e => onUpdateFormChange(key as keyof UpdateForm, Number(e.target.value))}
+                      style={{ fontSize: 15, fontWeight: 700, textAlign: "center", padding: "8px" }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                {([["Connected (funnel)", "calls_connected", "#2563EB"], ["Converted (funnel)", "calls_converted", "#16A34A"]] as [string, keyof UpdateForm, string][]).map(([label, key, color]) => (
+                  <div key={key} style={{ background: "#fff", border: `1px solid ${color}35`, borderRadius: 9, padding: "10px 12px" }}>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 700, color, marginBottom: 6 }}>{label}</label>
+                    <input type="number" className="input" min={0} value={newUpdate[key] as number} onChange={e => onUpdateFormChange(key, Number(e.target.value))} style={{ fontSize: 15, fontWeight: 700, textAlign: "center", padding: "8px" }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+              {(newUpdate.channel === "email" ? emailFields : waFields).map(([label, key]) => (
+                <div key={key}>
+                  <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>{label}</label>
+                  <input type="number" className="input" value={newUpdate[key] as number} onChange={e => onUpdateFormChange(key, Number(e.target.value))} style={{ fontSize: 13, width: 100 }} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <textarea className="input" rows={2} placeholder="Notes..." value={newUpdate.notes} onChange={e => onUpdateFormChange("notes", e.target.value)} style={{ resize: "none", fontSize: 13, marginBottom: 10 }} />
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={onCancelForm} className="btn-secondary" style={{ fontSize: 12 }}>Cancel</button>
             <button onClick={onSaveUpdate} className="btn-primary" style={{ fontSize: 12 }}>Add Entry Row</button>
@@ -1333,55 +724,33 @@ function CampaignDataSection({ updates, accumulated, showUpdateForm, newUpdate, 
       )}
 
       {updates.length === 0 ? (
-        <p style={{ fontSize: 12.5, color: "#A8A29E", textAlign: "center", padding: "20px 0" }}>
-          No entries yet. Each entry you add becomes a new row, never overwriting previous ones.
-        </p>
+        <p style={{ fontSize: 12.5, color: "#A8A29E", textAlign: "center", padding: "20px 0" }}>No entries yet. Each entry you add becomes a new row.</p>
       ) : (
         <div>
           <div style={{ overflowX: "auto", marginBottom: 14 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ background: "#F9F8F7", borderBottom: "1px solid #F0EEEC" }}>
-                  {["Date", "Channel", "Primary", "Secondary", "Tertiary", "Notes", ""].map((h) => (
-                    <th key={h} style={{ textAlign: h === "Primary" || h === "Secondary" || h === "Tertiary" ? "right" : "left", padding: "7px 10px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
+              <thead><tr style={{ background: "#F9F8F7", borderBottom: "1px solid #F0EEEC" }}>
+                {["Date","Channel","Primary","Secondary","Tertiary","Notes",""].map(h => <th key={h} style={{ textAlign: ["Primary","Secondary","Tertiary"].includes(h) ? "right" : "left", padding: "7px 10px", fontSize: 11, fontWeight: 600, color: "#A8A29E" }}>{h}</th>)}
+              </tr></thead>
               <tbody>
-                {updates.map((u) => (
+                {updates.map(u => (
                   <tr key={u.id} style={{ borderBottom: "1px solid #F5F4F0" }}>
                     <td style={{ padding: "8px 10px", color: "#78716C" }}>{u.update_date}</td>
-                    <td style={{ padding: "8px 10px" }}><span style={channelBadgeStyle(u.channel)}>{u.channel}</span></td>
-                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#1C1917" }}>
-                      {u.channel === "email" ? u.email_sent : u.channel === "whatsapp" ? u.whatsapp_sent : u.calls_made}
-                    </td>
-                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#57534E" }}>
-                      {u.channel === "email" ? u.email_opened : u.channel === "whatsapp" ? u.whatsapp_delivered : u.calls_connected}
-                    </td>
-                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#57534E" }}>
-                      {u.channel === "email" ? u.email_clicked : u.channel === "whatsapp" ? u.whatsapp_replied : u.calls_converted}
-                    </td>
+                    <td style={{ padding: "8px 10px" }}><span style={channelBadge(u.channel)}>{u.channel}</span></td>
+                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#1C1917" }}>{u.channel === "email" ? u.email_sent : u.channel === "whatsapp" ? u.whatsapp_sent : u.calls_made}</td>
+                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#57534E" }}>{u.channel === "email" ? u.email_opened : u.channel === "whatsapp" ? u.whatsapp_delivered : (u.follow_up_calls_made ?? u.calls_connected)}</td>
+                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#57534E" }}>{u.channel === "email" ? u.email_clicked : u.channel === "whatsapp" ? u.whatsapp_replied : (u.demo_scheduled ?? u.calls_converted)}</td>
                     <td style={{ padding: "8px 10px", color: "#A8A29E", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.notes || "—"}</td>
-                    <td style={{ padding: "8px 10px" }}>
-                      <button
-                        onClick={() => onDeleteUpdate(u.id)}
-                        style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, borderRadius: 5, display: "flex" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#FEE2E2")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <Trash2 size={12} color="#EF4444" />
-                      </button>
-                    </td>
+                    <td style={{ padding: "8px 10px" }}><button onClick={() => onDeleteUpdate(u.id)} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, borderRadius: 5, display: "flex" }} onMouseEnter={e => (e.currentTarget.style.background = "#FEE2E2")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}><Trash2 size={12} color="#EF4444" /></button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <div style={{ background: "#F0FDF4", border: "1px solid #A7F3D0", borderRadius: 8, padding: 14 }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#15803D", marginBottom: 10 }}>
-              ✅ Accumulated Totals ({updates.length} entries combined)
-            </p>
+          {/* Accumulated totals */}
+          <div style={{ background: "#F0FDF4", border: "1px solid #A7F3D0", borderRadius: 8, padding: 14, marginBottom: 12 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#15803D", marginBottom: 10 }}>✅ Accumulated Totals ({updates.length} entries combined)</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
               {totalCards.map(({ title, color, bd, items }) => (
                 <div key={title} style={{ background: "#fff", borderRadius: 8, padding: 12, border: `1px solid ${bd}` }}>
@@ -1389,110 +758,75 @@ function CampaignDataSection({ updates, accumulated, showUpdateForm, newUpdate, 
                   {items.map(([label, value, total]) => (
                     <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "4px 0", borderBottom: "1px solid #F5F4F0" }}>
                       <span style={{ color: "#78716C" }}>{label}</span>
-                      <span>
-                        <span style={{ fontWeight: 700, color }}>{value}</span>
-                        {total > 0 && <span style={{ fontSize: 10.5, color: "#A8A29E", marginLeft: 5 }}>({Math.round((value / total) * 100)}%)</span>}
-                      </span>
+                      <span><span style={{ fontWeight: 700, color }}>{value}</span>{total > 0 && <span style={{ fontSize: 10.5, color: "#A8A29E", marginLeft: 5 }}>({Math.round((value/total)*100)}%)</span>}</span>
                     </div>
                   ))}
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Call activity breakdown cards */}
+          {(accumulated.callsMade + accumulated.followUpCallsMade + accumulated.demoScheduled + accumulated.demoCompleted + accumulated.demoRescheduled + accumulated.followUpMeetingDone) > 0 && (
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 700, color: "#6D28D9", marginBottom: 8 }}>📞 Call Activity Breakdown</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8 }}>
+                {CALL_METRICS.map(({ key, label, icon, color, bg }) => (
+                  <div key={key} style={{ background: bg, border: `1px solid ${color}30`, borderRadius: 10, padding: "12px 10px", textAlign: "center" }}>
+                    <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
+                    <p style={{ fontSize: 24, fontWeight: 800, color, lineHeight: 1 }}>{callMetricValue[key] ?? 0}</p>
+                    <p style={{ fontSize: 10.5, fontWeight: 600, color: "#57534E", marginTop: 5, lineHeight: 1.3 }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Leads Section ────────────────────────────────────────────────────────────
-
+// ─── LeadsSection ─────────────────────────────────────────────────────────────
 interface LeadsSectionProps {
-  leads: Lead[];
-  activeEntry: string | null;
-  showLeadForm: boolean;
-  newLead: LeadForm;
-  onToggleForm: () => void;
-  onCancelForm: () => void;
-  onLeadFormChange: (key: keyof LeadForm, value: string) => void;
-  onSaveLead: () => void;
-  onDeleteLead: (id: string) => void;
-  onUpdateLeadStatus: (id: string, newStatus: string, oldStatus: string) => void;
+  leads: Lead[]; activeEntry: string | null; showLeadForm: boolean; newLead: LeadForm;
+  onToggleForm: () => void; onCancelForm: () => void; onLeadFormChange: (key: keyof LeadForm, value: string) => void;
+  onSaveLead: () => void; onDeleteLead: (id: string) => void; onUpdateLeadStatus: (id: string, ns: string, os: string) => void;
 }
-
 function LeadsSection({ leads, activeEntry, showLeadForm, newLead, onToggleForm, onCancelForm, onLeadFormChange, onSaveLead, onDeleteLead, onUpdateLeadStatus }: LeadsSectionProps) {
-  const leadFormFields: [string, keyof LeadForm, string, string][] = [
-    ["Lead Name *", "name", "text", ""],
-    ["Country", "country", "text", "e.g. India"],
-    ["State", "state", "text", "e.g. Maharashtra"],
-    ["City / Location", "location", "text", ""],
-    ["Expected Volume", "expected_volume", "number", ""],
-    ["Expected Revenue (₹)", "expected_revenue", "number", ""],
-    ["Cycle Label", "cycle_label", "text", "e.g. Q1 2025"],
+  const fields: [string, keyof LeadForm, string, string][] = [
+    ["Lead Name *","name","text",""],["Country","country","text","e.g. India"],["State","state","text","e.g. Maharashtra"],
+    ["City / Location","location","text",""],["Expected Volume","expected_volume","number",""],
+    ["Expected Revenue (₹)","expected_revenue","number",""],["Cycle Label","cycle_label","text","e.g. Q1 2025"],
   ];
-
   return (
     <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 10, padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <h3 style={{ fontSize: 13.5, fontWeight: 600, color: "#1C1917" }}>
-          Lead Details{" "}
-          <span style={{ fontSize: 12, color: "#A8A29E", fontWeight: 400 }}>({leads.length} total)</span>
-        </h3>
-        <button onClick={onToggleForm} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }}>
-          <Plus size={12} /> Add Lead
-        </button>
+        <h3 style={{ fontSize: 13.5, fontWeight: 600, color: "#1C1917" }}>Lead Details <span style={{ fontSize: 12, color: "#A8A29E", fontWeight: 400 }}>({leads.length} total)</span></h3>
+        <button onClick={onToggleForm} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }}><Plus size={12} /> Add Lead</button>
       </div>
-
       {showLeadForm && (
         <div style={{ background: "#F9F8F7", border: "1px solid #E7E5E4", borderRadius: 8, padding: 14, marginBottom: 12 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-            {leadFormFields.map(([label, key, type, placeholder]) => (
-              <div key={key}>
-                <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>{label}</label>
-                <input
-                  className="input"
-                  type={type}
-                  value={newLead[key]}
-                  onChange={(e) => onLeadFormChange(key, e.target.value)}
-                  placeholder={placeholder}
-                  style={{ fontSize: 13 }}
-                />
-              </div>
+            {fields.map(([label, key, type, placeholder]) => (
+              <div key={key}><label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>{label}</label><input className="input" type={type} value={newLead[key]} onChange={e => onLeadFormChange(key, e.target.value)} placeholder={placeholder} style={{ fontSize: 13 }} /></div>
             ))}
-            <div>
-              <label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Status</label>
-              <select className="input" value={newLead.status} onChange={(e) => onLeadFormChange("status", e.target.value)} style={{ fontSize: 13 }}>
-                {LEAD_STATUSES.map((s) => (
-                  <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                ))}
-              </select>
-            </div>
+            <div><label style={{ display: "block", fontSize: 11.5, fontWeight: 500, color: "#78716C", marginBottom: 4 }}>Status</label><select className="input" value={newLead.status} onChange={e => onLeadFormChange("status", e.target.value)} style={{ fontSize: 13 }}>{LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}</select></div>
           </div>
-          <textarea className="input" rows={2} placeholder="Notes..." value={newLead.notes} onChange={(e) => onLeadFormChange("notes", e.target.value)} style={{ resize: "none", fontSize: 13, marginBottom: 10 }} />
+          <textarea className="input" rows={2} placeholder="Notes..." value={newLead.notes} onChange={e => onLeadFormChange("notes", e.target.value)} style={{ resize: "none", fontSize: 13, marginBottom: 10 }} />
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={onCancelForm} className="btn-secondary" style={{ fontSize: 12 }}>Cancel</button>
             <button onClick={onSaveLead} className="btn-primary" style={{ fontSize: 12 }}>Save Lead</button>
           </div>
         </div>
       )}
-
-      {leads.length === 0 ? (
-        <p style={{ fontSize: 12.5, color: "#A8A29E", textAlign: "center", padding: "16px 0" }}>No leads yet.</p>
-      ) : (
+      {leads.length === 0 ? <p style={{ fontSize: 12.5, color: "#A8A29E", textAlign: "center", padding: "16px 0" }}>No leads yet.</p> : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #F5F4F0" }}>
-                {["Lead", "Period", "Country", "State", "Location", "Volume", "Exp. Revenue", "Collected", "Status", "Cycle", "Updated", ""].map((h) => (
-                  <th key={h} style={{ textAlign: "left", padding: "0 8px 8px 0", fontSize: 11.5, fontWeight: 500, color: "#A8A29E", whiteSpace: "nowrap" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((lead) => (
-                <LeadRow key={lead.id} lead={lead} activeEntry={activeEntry} onDelete={onDeleteLead} onUpdateStatus={onUpdateLeadStatus} />
-              ))}
-            </tbody>
+            <thead><tr style={{ borderBottom: "1px solid #F5F4F0" }}>
+              {["Lead","Period","Country","State","Location","Volume","Exp. Revenue","Collected","Status","Cycle","Updated",""].map(h => <th key={h} style={{ textAlign: "left", padding: "0 8px 8px 0", fontSize: 11.5, fontWeight: 500, color: "#A8A29E", whiteSpace: "nowrap" }}>{h}</th>)}
+            </tr></thead>
+            <tbody>{leads.map(lead => <LeadRow key={lead.id} lead={lead} activeEntry={activeEntry} onDelete={onDeleteLead} onUpdateStatus={onUpdateLeadStatus} />)}</tbody>
           </table>
         </div>
       )}
@@ -1500,68 +834,33 @@ function LeadsSection({ leads, activeEntry, showLeadForm, newLead, onToggleForm,
   );
 }
 
-// ─── Lead Row ─────────────────────────────────────────────────────────────────
-
-interface LeadRowProps {
-  lead: Lead;
-  activeEntry: string | null;
-  onDelete: (id: string) => void;
-  onUpdateStatus: (id: string, newStatus: string, oldStatus: string) => void;
-}
-
+// ─── LeadRow ──────────────────────────────────────────────────────────────────
+interface LeadRowProps { lead: Lead; activeEntry: string | null; onDelete: (id: string) => void; onUpdateStatus: (id: string, ns: string, os: string) => void; }
 function LeadRow({ lead, activeEntry, onDelete, onUpdateStatus }: LeadRowProps) {
   const periodLabel = () => {
     if (!lead.data_entry_id) return <span style={{ color: "#D6D3D1" }}>—</span>;
     if (lead.data_entry_id === activeEntry) return <span style={{ background: "#DBEAFE", color: "#1D4ED8", padding: "1px 6px", borderRadius: 5, fontWeight: 500 }}>This period</span>;
     return <span style={{ background: "#F5F4F0", color: "#78716C", padding: "1px 6px", borderRadius: 5 }}>Other period</span>;
   };
-
   return (
     <tr style={{ borderBottom: "1px solid #FAFAF9", background: lead.is_updated_this_cycle ? "#FFFBEB" : "transparent" }}>
-      <td style={{ padding: "9px 8px 9px 0", fontWeight: 500, color: "#1C1917" }}>
-        {lead.name}
-        {lead.is_updated_this_cycle && (
-          <span style={{ marginLeft: 5, fontSize: 10, background: "#FEF3C7", color: "#92400E", padding: "1px 5px", borderRadius: 8, fontWeight: 600 }}>↑</span>
-        )}
-      </td>
+      <td style={{ padding: "9px 8px 9px 0", fontWeight: 500, color: "#1C1917" }}>{lead.name}{lead.is_updated_this_cycle && <span style={{ marginLeft: 5, fontSize: 10, background: "#FEF3C7", color: "#92400E", padding: "1px 5px", borderRadius: 8, fontWeight: 600 }}>↑</span>}</td>
       <td style={{ padding: "9px 8px 9px 0", fontSize: 11.5 }}>{periodLabel()}</td>
       <td style={{ padding: "9px 8px 9px 0", color: "#78716C", fontSize: 12 }}>{lead.country ?? "—"}</td>
       <td style={{ padding: "9px 8px 9px 0", color: "#78716C", fontSize: 12 }}>{lead.state ?? "—"}</td>
       <td style={{ padding: "9px 8px 9px 0", color: "#78716C", fontSize: 12 }}>{lead.location ?? "—"}</td>
       <td style={{ padding: "9px 8px 9px 0", color: "#78716C", fontSize: 12 }}>{lead.expected_volume ?? "—"}</td>
-      <td style={{ padding: "9px 8px 9px 0", fontWeight: 500, color: "#D97706", fontSize: 12 }}>
-        {lead.expected_revenue ? fmtINR(lead.expected_revenue) : "—"}
-      </td>
-      <td style={{ padding: "9px 8px 9px 0", fontWeight: 600, color: "#16A34A", fontSize: 12 }}>
-        {lead.revenue_collected && lead.revenue_collected > 0 ? fmtINR(lead.revenue_collected) : "—"}
-      </td>
+      <td style={{ padding: "9px 8px 9px 0", fontWeight: 500, color: "#D97706", fontSize: 12 }}>{lead.expected_revenue ? fmtINR(lead.expected_revenue) : "—"}</td>
+      <td style={{ padding: "9px 8px 9px 0", fontWeight: 600, color: "#16A34A", fontSize: 12 }}>{lead.revenue_collected && lead.revenue_collected > 0 ? fmtINR(lead.revenue_collected) : "—"}</td>
       <td style={{ padding: "9px 8px 9px 0" }}>
-        <select
-          value={lead.status}
-          onChange={(e) => onUpdateStatus(lead.id, e.target.value, lead.status)}
-          style={{ appearance: "none", padding: "3px 8px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, background: `${STATUS_COLOR[lead.status]}18`, color: STATUS_COLOR[lead.status], border: "none", cursor: "pointer", fontFamily: "inherit" }}
-        >
-          {LEAD_STATUSES.map((s) => (
-            <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-          ))}
+        <select value={lead.status} onChange={e => onUpdateStatus(lead.id, e.target.value, lead.status)}
+          style={{ appearance: "none", padding: "3px 8px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, background: `${STATUS_COLOR[lead.status]}18`, color: STATUS_COLOR[lead.status], border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+          {LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
         </select>
       </td>
       <td style={{ padding: "9px 8px 9px 0", color: "#A8A29E", fontSize: 12 }}>{lead.cycle_label ?? "—"}</td>
-      <td style={{ padding: "9px 8px 9px 0", fontSize: 12, color: "#78716C" }}>
-        {lead.previous_status && lead.previous_status !== lead.status ? (
-          <span>{lead.previous_status} → <strong>{lead.status}</strong></span>
-        ) : "—"}
-      </td>
-      <td style={{ padding: "9px 0" }}>
-        <button
-          onClick={() => onDelete(lead.id)}
-          style={{ background: "transparent", border: "none", cursor: "pointer", padding: "3px 5px", borderRadius: 5 }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#FEE2E2")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        >
-          <Trash2 size={13} color="#EF4444" />
-        </button>
-      </td>
+      <td style={{ padding: "9px 8px 9px 0", fontSize: 12, color: "#78716C" }}>{lead.previous_status && lead.previous_status !== lead.status ? <span>{lead.previous_status} → <strong>{lead.status}</strong></span> : "—"}</td>
+      <td style={{ padding: "9px 0" }}><button onClick={() => onDelete(lead.id)} style={{ background: "transparent", border: "none", cursor: "pointer", padding: "3px 5px", borderRadius: 5 }} onMouseEnter={e => (e.currentTarget.style.background = "#FEE2E2")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}><Trash2 size={13} color="#EF4444" /></button></td>
     </tr>
   );
 }
