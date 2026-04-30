@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -435,14 +436,255 @@ export default function DataPanelPage() {
 
               {/* ── Section 3: Campaign Data (only after period saved) ── */}
               {activeEntry!=="new" && (
-                <CollapsibleSection id="campaign" label="Campaign Data Entries" color="#7C3AED" open={openSection} onToggle={s=>setOpenSection(openSection===s?"":s)}>
-                  <CampaignSection
-                    updates={updates} acc={acc}
-                    showForm={showUpdateForm} newUpdate={newUpdate}
-                    onOpenForm={()=>setShowUpdateForm(true)}
-                    onCloseForm={()=>setShowUpdateForm(false)}
-                    onChange={(k,v)=>setNewUpdate(p=>({...p,[k]:v}))}
-                    onSave={saveUpdate} onDelete={deleteUpdate}/>
+                <CollapsibleSection id="campaign" label={`Campaign Data Entries (${updates.length})`} color="#7C3AED" open={openSection} onToggle={s=>setOpenSection(openSection===s?"":s)}>
+                  
+                  {/* Add Entry button */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,marginTop:4}}>
+                    <p style={{fontSize:12.5,color:"#78716C"}}>{updates.length} entries — all rows accumulate into period totals</p>
+                    {!showUpdateForm && (
+                      <button onClick={()=>setShowUpdateForm(true)} className="btn-primary" style={{padding:"6px 14px",fontSize:12}}>
+                        <Plus size={12}/> Add Entry
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ── INLINE Add Entry Form ── */}
+                  {showUpdateForm && (
+                    <div style={{background:"#F9F8F7",border:"1px solid #DDD6FE",borderRadius:12,padding:16,marginBottom:16}}>
+                      
+                      {/* Channel + Date */}
+                      <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap",alignItems:"flex-end"}}>
+                        <div>
+                          <label style={lbl}>Channel</label>
+                          <select className="input" value={newUpdate.channel}
+                            onChange={e=>{
+                              const ch = e.target.value as "email"|"whatsapp"|"calls";
+                              setNewUpdate(p=>({...p, channel:ch}));
+                            }}
+                            style={{fontSize:13,minWidth:160}}>
+                            <option value="email">📧 Email</option>
+                            <option value="whatsapp">💬 WhatsApp</option>
+                            <option value="calls">📞 Calls</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={lbl}>Date</label>
+                          <input type="date" className="input" value={newUpdate.update_date}
+                            onChange={e=>setNewUpdate(p=>({...p,update_date:e.target.value}))} style={{fontSize:13}}/>
+                        </div>
+                        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+                          <button onClick={()=>setShowUpdateForm(false)} className="btn-secondary" style={{fontSize:12}}>Cancel</button>
+                          <button onClick={saveUpdate} className="btn-primary" style={{fontSize:12}}>Add Row</button>
+                        </div>
+                      </div>
+
+                      {/* ── CALLS fields ── */}
+                      {newUpdate.channel==="calls" && (
+                        <div>
+                          <p style={{fontSize:12.5,fontWeight:700,color:"#6D28D9",marginBottom:12,padding:"8px 12px",background:"#EDE9FE",borderRadius:8}}>
+                            📞 Enter count for each call activity below
+                          </p>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:10}}>
+                            {[
+                              {key:"calls_made",           label:"New Calls Made",        icon:"📞",color:"#7C3AED",bg:"#F5F3FF"},
+                              {key:"follow_up_calls_made", label:"Follow Up Call Made",   icon:"🔁",color:"#2563EB",bg:"#EFF6FF"},
+                              {key:"demo_scheduled",       label:"Demo Scheduled",        icon:"📅",color:"#0891B2",bg:"#ECFEFF"},
+                              {key:"demo_completed",       label:"Demo Completed",        icon:"✅",color:"#16A34A",bg:"#F0FDF4"},
+                              {key:"demo_rescheduled",     label:"Demo Rescheduled",      icon:"🔄",color:"#D97706",bg:"#FFFBEB"},
+                              {key:"follow_up_meeting_done",label:"Follow Up Meeting Done",icon:"🤝",color:"#E8611A",bg:"#FFF7ED"},
+                            ].map(({key,label,icon,color,bg})=>(
+                              <div key={key} style={{background:bg,border:`1.5px solid ${color}40`,borderRadius:10,padding:"14px"}}>
+                                <label style={{display:"block",fontSize:12,fontWeight:700,color,marginBottom:10}}>{icon} {label}</label>
+                                <input
+                                  type="number" min={0}
+                                  value={(newUpdate as any)[key]}
+                                  onChange={e=>setNewUpdate(p=>({...p,[key]:Number(e.target.value)}))}
+                                  style={{width:"100%",padding:"10px",border:`1px solid ${color}50`,borderRadius:8,fontSize:18,fontWeight:800,textAlign:"center",fontFamily:"inherit",outline:"none",background:"#fff",color}}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:4}}>
+                            {([
+                              {key:"calls_connected",label:"Connected (funnel)",color:"#2563EB",bg:"#EFF6FF"},
+                              {key:"calls_converted",label:"Converted (funnel)",color:"#16A34A",bg:"#F0FDF4"},
+                            ]).map(({key,label,color,bg})=>(
+                              <div key={key} style={{background:bg,border:`1px solid ${color}30`,borderRadius:10,padding:"12px"}}>
+                                <label style={{display:"block",fontSize:12,fontWeight:700,color,marginBottom:8}}>{label}</label>
+                                <input type="number" min={0}
+                                  value={(newUpdate as any)[key]}
+                                  onChange={e=>setNewUpdate(p=>({...p,[key]:Number(e.target.value)}))}
+                                  style={{width:"100%",padding:"8px",border:`1px solid ${color}40`,borderRadius:8,fontSize:16,fontWeight:700,textAlign:"center",fontFamily:"inherit",outline:"none",background:"#fff",color}}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── EMAIL fields ── */}
+                      {newUpdate.channel==="email" && (
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                          {([
+                            {key:"email_sent",   label:"Sent",    color:"#1D4ED8",bg:"#EFF6FF"},
+                            {key:"email_opened", label:"Opened",  color:"#0891B2",bg:"#ECFEFF"},
+                            {key:"email_clicked",label:"Clicked", color:"#7C3AED",bg:"#F5F3FF"},
+                          ]).map(({key,label,color,bg})=>(
+                            <div key={key} style={{background:bg,border:`1px solid ${color}30`,borderRadius:10,padding:"14px"}}>
+                              <label style={{display:"block",fontSize:12,fontWeight:700,color,marginBottom:10}}>{label}</label>
+                              <input type="number" min={0}
+                                value={(newUpdate as any)[key]}
+                                onChange={e=>setNewUpdate(p=>({...p,[key]:Number(e.target.value)}))}
+                                style={{width:"100%",padding:"10px",border:`1px solid ${color}40`,borderRadius:8,fontSize:18,fontWeight:800,textAlign:"center",fontFamily:"inherit",outline:"none",background:"#fff",color}}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* ── WHATSAPP fields ── */}
+                      {newUpdate.channel==="whatsapp" && (
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                          {([
+                            {key:"whatsapp_sent",      label:"Sent",      color:"#15803D",bg:"#F0FDF4"},
+                            {key:"whatsapp_delivered", label:"Delivered", color:"#0891B2",bg:"#ECFEFF"},
+                            {key:"whatsapp_replied",   label:"Replied",   color:"#7C3AED",bg:"#F5F3FF"},
+                          ]).map(({key,label,color,bg})=>(
+                            <div key={key} style={{background:bg,border:`1px solid ${color}30`,borderRadius:10,padding:"14px"}}>
+                              <label style={{display:"block",fontSize:12,fontWeight:700,color,marginBottom:10}}>{label}</label>
+                              <input type="number" min={0}
+                                value={(newUpdate as any)[key]}
+                                onChange={e=>setNewUpdate(p=>({...p,[key]:Number(e.target.value)}))}
+                                style={{width:"100%",padding:"10px",border:`1px solid ${color}40`,borderRadius:8,fontSize:18,fontWeight:800,textAlign:"center",fontFamily:"inherit",outline:"none",background:"#fff",color}}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Notes */}
+                      <div style={{marginTop:12}}>
+                        <label style={lbl}>Notes (optional)</label>
+                        <textarea className="input" rows={2}
+                          value={newUpdate.notes}
+                          onChange={e=>setNewUpdate(p=>({...p,notes:e.target.value}))}
+                          style={{resize:"none",fontSize:13}}/>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Rows table ── */}
+                  {updates.length>0 && (
+                    <div style={{overflowX:"auto",marginBottom:14}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
+                        <thead><tr style={{background:"#F9F8F7",borderBottom:"1px solid #F0EEEC"}}>
+                          {["Date","Channel","Metric 1","Metric 2","Metric 3","Notes",""].map(h=>(
+                            <th key={h} style={{textAlign:"left",padding:"7px 10px",fontSize:11,fontWeight:600,color:"#A8A29E"}}>{h}</th>
+                          ))}
+                        </tr></thead>
+                        <tbody>
+                          {updates.map(u=>(
+                            <tr key={u.id} style={{borderBottom:"1px solid #F5F4F0"}}>
+                              <td style={{padding:"8px 10px",color:"#78716C"}}>{u.update_date}</td>
+                              <td style={{padding:"8px 10px"}}>
+                                <span style={{padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:600,
+                                  background:u.channel==="email"?"#DBEAFE":u.channel==="whatsapp"?"#DCFCE7":"#EDE9FE",
+                                  color:u.channel==="email"?"#1D4ED8":u.channel==="whatsapp"?"#15803D":"#6D28D9"}}>
+                                  {u.channel}
+                                </span>
+                              </td>
+                              <td style={{padding:"8px 10px",fontWeight:700,color:"#1C1917"}}>
+                                {u.channel==="email"?`${u.email_sent} sent`:u.channel==="whatsapp"?`${u.whatsapp_sent} sent`:`${u.calls_made} new calls`}
+                              </td>
+                              <td style={{padding:"8px 10px",color:"#57534E"}}>
+                                {u.channel==="email"?`${u.email_opened} opened`:u.channel==="whatsapp"?`${u.whatsapp_delivered} delivered`:`${u.follow_up_calls_made} follow-up`}
+                              </td>
+                              <td style={{padding:"8px 10px",color:"#57534E"}}>
+                                {u.channel==="email"?`${u.email_clicked} clicked`:u.channel==="whatsapp"?`${u.whatsapp_replied} replied`:`${u.demo_scheduled} demo sched.`}
+                              </td>
+                              <td style={{padding:"8px 10px",color:"#A8A29E",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.notes||"—"}</td>
+                              <td style={{padding:"8px 10px"}}>
+                                <button onClick={()=>deleteUpdate(u.id)}
+                                  style={{background:"transparent",border:"none",cursor:"pointer",padding:4,borderRadius:5,display:"flex"}}
+                                  onMouseEnter={e=>(e.currentTarget.style.background="#FEE2E2")}
+                                  onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
+                                  <Trash2 size={12} color="#EF4444"/>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* ── Accumulated totals ── */}
+                  {updates.length>0 && (
+                    <div>
+                      <div style={{background:"#F0FDF4",border:"1px solid #A7F3D0",borderRadius:10,padding:14,marginBottom:12}}>
+                        <p style={{fontSize:12,fontWeight:700,color:"#15803D",marginBottom:10}}>✅ Accumulated Totals ({updates.length} entries)</p>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+                          {[
+                            {title:"📧 EMAIL",color:"#1D4ED8",bd:"#BFDBFE",items:[["Sent",acc.emailSent,0],["Opened",acc.emailOpened,acc.emailSent],["Clicked",acc.emailClicked,acc.emailSent]] as [string,number,number][]},
+                            {title:"💬 WHATSAPP",color:"#15803D",bd:"#A7F3D0",items:[["Sent",acc.waSent,0],["Delivered",acc.waDelivered,acc.waSent],["Replied",acc.waReplied,acc.waSent]] as [string,number,number][]},
+                            {title:"📞 CALLS",color:"#6D28D9",bd:"#DDD6FE",items:[
+                              ["New Calls Made",acc.callsMade,0],
+                              ["Follow Up Call Made",acc.followUpCallsMade,0],
+                              ["Demo Scheduled",acc.demoScheduled,acc.callsMade],
+                              ["Demo Completed",acc.demoCompleted,acc.demoScheduled],
+                              ["Demo Rescheduled",acc.demoRescheduled,acc.demoScheduled],
+                              ["Follow Up Meeting Done",acc.followUpMeetingDone,0],
+                              ["Connected",acc.callsConnected,acc.callsMade],
+                              ["Converted",acc.callsConverted,acc.callsMade],
+                            ] as [string,number,number][]},
+                          ].map(({title,color,bd,items})=>(
+                            <div key={title} style={{background:"#fff",borderRadius:8,padding:12,border:`1px solid ${bd}`}}>
+                              <p style={{fontSize:11,fontWeight:700,color,marginBottom:8}}>{title}</p>
+                              {items.map(([label,value,total])=>(
+                                <div key={label} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #F5F4F0"}}>
+                                  <span style={{color:"#78716C"}}>{label}</span>
+                                  <span>
+                                    <span style={{fontWeight:700,color}}>{value}</span>
+                                    {total>0&&<span style={{fontSize:10.5,color:"#A8A29E",marginLeft:4}}>({Math.round((value/total)*100)}%)</span>}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Call activity visual cards */}
+                      {(acc.callsMade+acc.followUpCallsMade+acc.demoScheduled+acc.demoCompleted+acc.demoRescheduled+acc.followUpMeetingDone)>0 && (
+                        <div>
+                          <p style={{fontSize:12,fontWeight:700,color:"#6D28D9",marginBottom:8}}>📞 Call Activity Breakdown</p>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8}}>
+                            {[
+                              {key:"callsMade",           label:"New Calls Made",        icon:"📞",color:"#7C3AED",bg:"#F5F3FF"},
+                              {key:"followUpCallsMade",   label:"Follow Up Call Made",   icon:"🔁",color:"#2563EB",bg:"#EFF6FF"},
+                              {key:"demoScheduled",       label:"Demo Scheduled",        icon:"📅",color:"#0891B2",bg:"#ECFEFF"},
+                              {key:"demoCompleted",       label:"Demo Completed",        icon:"✅",color:"#16A34A",bg:"#F0FDF4"},
+                              {key:"demoRescheduled",     label:"Demo Rescheduled",      icon:"🔄",color:"#D97706",bg:"#FFFBEB"},
+                              {key:"followUpMeetingDone", label:"Follow Up Meeting Done",icon:"🤝",color:"#E8611A",bg:"#FFF7ED"},
+                            ].map(({key,label,icon,color,bg})=>(
+                              <div key={key} style={{background:bg,border:`1px solid ${color}25`,borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
+                                <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
+                                <p style={{fontSize:26,fontWeight:800,color,lineHeight:1}}>{(acc as any)[key]??0}</p>
+                                <p style={{fontSize:10.5,fontWeight:600,color:"#57534E",marginTop:5,lineHeight:1.3}}>{label}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {updates.length===0 && !showUpdateForm && (
+                    <div style={{textAlign:"center",padding:"24px 0",color:"#A8A29E",fontSize:13}}>
+                      No entries yet. Click "Add Entry" to log email, WhatsApp or call data.
+                    </div>
+                  )}
+
                 </CollapsibleSection>
               )}
 

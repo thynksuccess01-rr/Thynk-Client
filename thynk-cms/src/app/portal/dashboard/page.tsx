@@ -107,6 +107,14 @@ export default function PortalDashboard() {
   const callsMade = entries.reduce((s, e) => s + e.calls_made, 0) + callUpds.reduce((s, u) => s + u.calls_made, 0);
   const callsConnected = entries.reduce((s, e) => s + e.calls_connected, 0) + callUpds.reduce((s, u) => s + u.calls_connected, 0);
   const callsConverted = entries.reduce((s, e) => s + e.calls_converted, 0) + callUpds.reduce((s, u) => s + u.calls_converted, 0);
+
+  // ── New call activity metrics ─────────────────────────────────────────────
+  const followUpCallsMade   = entries.reduce((s,e)=>s+(e.follow_up_calls_made??0),0)   + callUpds.reduce((s,u)=>s+(u.follow_up_calls_made??0),0);
+  const demoScheduled       = entries.reduce((s,e)=>s+(e.demo_scheduled??0),0)         + callUpds.reduce((s,u)=>s+(u.demo_scheduled??0),0);
+  const demoCompleted       = entries.reduce((s,e)=>s+(e.demo_completed??0),0)         + callUpds.reduce((s,u)=>s+(u.demo_completed??0),0);
+  const demoRescheduled     = entries.reduce((s,e)=>s+(e.demo_rescheduled??0),0)       + callUpds.reduce((s,u)=>s+(u.demo_rescheduled??0),0);
+  const followUpMeetingDone = entries.reduce((s,e)=>s+(e.follow_up_meeting_done??0),0) + callUpds.reduce((s,u)=>s+(u.follow_up_meeting_done??0),0);
+
   const totalRev = entries.reduce((s, e) => s + (e.total_revenue_collected ?? 0), 0);
   const expectedRev = entries.reduce((s, e) => s + (e.expected_collection ?? 0), 0);
   const totalLic = entries.reduce((s, e) => s + (e.total_licences ?? 0), 0);
@@ -141,12 +149,15 @@ export default function PortalDashboard() {
   ].filter((d) => d.value > 0);
 
   const rateRadarData = [
-    { metric: "Open Rate", value: rate(emailOpened, emailSent), fullMark: 100 },
-    { metric: "Click Rate", value: rate(emailClicked, emailSent), fullMark: 100 },
-    { metric: "WA Delivery", value: rate(waDelivered, waSent), fullMark: 100 },
-    { metric: "WA Reply", value: rate(waReplied, waSent), fullMark: 100 },
-    { metric: "Call Connect", value: rate(callsConnected, callsMade), fullMark: 100 },
-    { metric: "Conversion", value: rate(callsConverted, callsMade), fullMark: 100 },
+    {metric:"Open Rate",    value:rate(emailOpened,emailSent),       fullMark:100},
+    {metric:"Click Rate",   value:rate(emailClicked,emailSent),      fullMark:100},
+    {metric:"WA Delivery",  value:rate(waDelivered,waSent),          fullMark:100},
+    {metric:"WA Reply",     value:rate(waReplied,waSent),            fullMark:100},
+    {metric:"Call Connect", value:rate(callsConnected,callsMade),    fullMark:100},
+    {metric:"Demo Booked",  value:rate(demoScheduled,callsMade),     fullMark:100},
+    {metric:"Demo Done",    value:rate(demoCompleted,demoScheduled), fullMark:100},
+    {metric:"Conversion",   value:rate(callsConverted,callsMade),    fullMark:100},
+    {metric:"Lead Win",     value:rate(wonLeads,leads.length),       fullMark:100},
   ];
 
   const clientRevData: any[] = [];
@@ -204,11 +215,56 @@ export default function PortalDashboard() {
             <Card icon="📅" label="Periods" value={entries.length} sub={`${leads.length} leads`} color="#6366F1" />
             <Card icon="📧" label="Emails Sent" value={fmt(emailSent)} sub={`${rate(emailOpened, emailSent)}% opened`} color="#2563EB" />
             <Card icon="💬" label="WhatsApp" value={fmt(waSent)} sub={`${rate(waDelivered, waSent)}% delivered`} color="#16A34A" />
-            <Card icon="📞" label="Calls" value={fmt(callsMade)} sub={`${rate(callsConnected, callsMade)}% connected`} color="#7C3AED" />
+            <Card icon="📞" label="New Calls Made" value={fmt(callsMade)} sub={`${rate(callsConnected, callsMade)}% connected`} color="#7C3AED" />
             <Card icon="🎯" label="Total Leads" value={leads.length} sub={`${wonLeads} won`} color="#E8611A" />
             <Card icon="₹" label="Collected" value={`₹${fmtINR(totalRev)}`} sub={`₹${fmtINR(expectedRev)} expected`} color="#D97706" />
             <Card icon="📦" label="Licences" value={fmt(totalLic)} sub="units sold" color="#0891B2" />
             <Card icon="🔮" label="Pipeline" value={`₹${fmtINR(expectedRev)}`} sub="expected value" color="#BE185D" />
+          </div>
+
+
+          {/* ── Call Activity Breakdown ── */}
+          <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,padding:20,marginBottom:16}}>
+            <p style={{fontSize:12,fontWeight:700,color:"#6D28D9",letterSpacing:"0.08em",marginBottom:14}}>📞 CALL ACTIVITY BREAKDOWN</p>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:14}}>
+              {[
+                {icon:"📞",label:"New Calls Made",        value:callsMade,           color:"#7C3AED",bg:"#F5F3FF"},
+                {icon:"🔁",label:"Follow Up Call Made",   value:followUpCallsMade,   color:"#2563EB",bg:"#EFF6FF"},
+                {icon:"📅",label:"Demo Scheduled",        value:demoScheduled,       color:"#0891B2",bg:"#ECFEFF"},
+                {icon:"✅",label:"Demo Completed",        value:demoCompleted,       color:"#16A34A",bg:"#F0FDF4"},
+                {icon:"🔄",label:"Demo Rescheduled",      value:demoRescheduled,     color:"#D97706",bg:"#FFFBEB"},
+                {icon:"🤝",label:"Follow Up Meeting Done",value:followUpMeetingDone, color:"#E8611A",bg:"#FFF7ED"},
+              ].map(({icon,label,value,color,bg})=>(
+                <div key={label} style={{background:bg,border:`1px solid ${color}25`,borderRadius:12,padding:"16px 12px",textAlign:"center"}}>
+                  <div style={{fontSize:22,marginBottom:6}}>{icon}</div>
+                  <p style={{fontSize:28,fontWeight:800,color,lineHeight:1}}>{fmt(value)}</p>
+                  <p style={{fontSize:11,fontWeight:600,color:"#57534E",marginTop:6,lineHeight:1.3}}>{label}</p>
+                  {callsMade>0&&label==="Demo Scheduled"&&<p style={{fontSize:10,color:"#A8A29E",marginTop:3}}>{rate(value,callsMade)}% of calls</p>}
+                  {demoScheduled>0&&label==="Demo Completed"&&<p style={{fontSize:10,color:"#A8A29E",marginTop:3}}>{rate(value,demoScheduled)}% of scheduled</p>}
+                  {demoScheduled>0&&label==="Demo Rescheduled"&&<p style={{fontSize:10,color:"#A8A29E",marginTop:3}}>{rate(value,demoScheduled)}% of scheduled</p>}
+                </div>
+              ))}
+            </div>
+            {/* Call funnel mini */}
+            <div style={{background:"#F9F8F7",borderRadius:10,padding:"12px 16px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <span style={{fontSize:11.5,color:"#78716C",fontWeight:600}}>Funnel:</span>
+              {[
+                {label:"New Calls",value:callsMade,color:"#7C3AED"},
+                {label:"Follow Up",value:followUpCallsMade,color:"#2563EB"},
+                {label:"Demo Sched.",value:demoScheduled,color:"#0891B2"},
+                {label:"Demo Done",value:demoCompleted,color:"#16A34A"},
+                {label:"F/U Meeting",value:followUpMeetingDone,color:"#E8611A"},
+                {label:"Connected",value:callsConnected,color:"#3B82F6"},
+                {label:"Converted",value:callsConverted,color:"#059669"},
+              ].map(({label,value,color},i,arr)=>(
+                <span key={label} style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{background:`${color}15`,border:`1px solid ${color}30`,borderRadius:8,padding:"4px 10px",fontSize:12,fontWeight:700,color}}>
+                    {label}: {fmt(value)}
+                  </span>
+                  {i<arr.length-1&&<span style={{color:"#D6D3D1",fontSize:14}}>→</span>}
+                </span>
+              ))}
+            </div>
           </div>
 
           <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: "18px 24px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
@@ -221,9 +277,15 @@ export default function PortalDashboard() {
               <RateGauge label="Click Rate" value={rate(emailClicked, emailSent)} color="#6366F1" />
               <RateGauge label="WA Delivery" value={rate(waDelivered, waSent)} color="#10B981" />
               <RateGauge label="WA Reply" value={rate(waReplied, waSent)} color="#0891B2" />
-              <RateGauge label="Call Connect" value={rate(callsConnected, callsMade)} color="#7C3AED" />
-              <RateGauge label="Converted" value={rate(callsConverted, callsMade)} color="#E8611A" />
-              <RateGauge label="Lead Win" value={rate(wonLeads, leads.length)} color="#16A34A" />
+              <RateGauge label="Open Rate"     value={rate(emailOpened,emailSent)}       color="#3B82F6" />
+              <RateGauge label="Click Rate"    value={rate(emailClicked,emailSent)}      color="#6366F1" />
+              <RateGauge label="WA Delivery"   value={rate(waDelivered,waSent)}          color="#10B981" />
+              <RateGauge label="WA Reply"      value={rate(waReplied,waSent)}            color="#0891B2" />
+              <RateGauge label="Call Connect"  value={rate(callsConnected,callsMade)}    color="#7C3AED" />
+              <RateGauge label="Demo Sched."   value={rate(demoScheduled,callsMade)}     color="#0891B2" />
+              <RateGauge label="Demo Done"     value={rate(demoCompleted,demoScheduled)} color="#16A34A" />
+              <RateGauge label="Converted"     value={rate(callsConverted,callsMade)}    color="#E8611A" />
+              <RateGauge label="Lead Win Rate" value={rate(wonLeads,leads.length)}       color="#16A34A" />
             </div>
           </div>
 
@@ -333,8 +395,12 @@ export default function PortalDashboard() {
                 { icon: "🖱️", label: "Clicked", value: emailClicked, r: rate(emailClicked, emailSent), color: "#0891B2", bg: "#ECFEFF" },
                 { icon: "💬", label: "WA Delivered", value: waDelivered, r: rate(waDelivered, waSent), color: "#10B981", bg: "#ECFDF5" },
                 { icon: "↩️", label: "WA Replied", value: waReplied, r: rate(waReplied, waSent), color: "#16A34A", bg: "#F0FDF4" },
-                { icon: "📞", label: "Connected", value: callsConnected, r: rate(callsConnected, callsMade), color: "#3B82F6", bg: "#EFF6FF" },
-                { icon: "🏆", label: "Won Leads", value: wonLeads, r: rate(wonLeads, leads.length), color: "#16A34A", bg: "#DCFCE7" },
+                {icon:"📞",label:"New Calls",      value:callsMade,        r:null,                              color:"#7C3AED",bg:"#F5F3FF"},
+                {icon:"📅",label:"Demo Scheduled", value:demoScheduled,    r:rate(demoScheduled,callsMade),     color:"#0891B2",bg:"#ECFEFF"},
+                {icon:"✅",label:"Demo Completed", value:demoCompleted,    r:rate(demoCompleted,demoScheduled), color:"#16A34A",bg:"#F0FDF4"},
+                {icon:"🤝",label:"F/U Meeting",    value:followUpMeetingDone,r:rate(followUpMeetingDone,demoCompleted),color:"#E8611A",bg:"#FFF7ED"},
+                {icon:"📞",label:"Connected",      value:callsConnected,   r:rate(callsConnected,callsMade),    color:"#3B82F6",bg:"#EFF6FF"},
+                {icon:"🏆",label:"Won Leads",      value:wonLeads,         r:rate(wonLeads,leads.length),       color:"#16A34A",bg:"#DCFCE7"},
               ].map(({ icon, label, value, r, color, bg }, i, arr) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", flex: 1, gap: 0 }}>
                   <div style={{ flex: 1, background: bg, border: `1px solid ${color}20`, borderRadius: 10, padding: "14px 10px", textAlign: "center", minWidth: 0 }}>
@@ -424,18 +490,46 @@ export default function PortalDashboard() {
           const replied = e.whatsapp_replied + wu.reduce((s: number, u: any) => s + u.whatsapp_replied, 0);
           return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: sent, Delivered: delivered, Replied: replied };
         });
-        const callsPeriodData = entries.map((e) => {
-          const cu = updates.filter((u) => u.channel === "calls" && u.update_date >= e.period_start && u.update_date <= e.period_end);
-          const made = e.calls_made + cu.reduce((s: number, u: any) => s + u.calls_made, 0);
-          const connected = e.calls_connected + cu.reduce((s: number, u: any) => s + u.calls_connected, 0);
-          const converted = e.calls_converted + cu.reduce((s: number, u: any) => s + u.calls_converted, 0);
-          return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Made: made, Connected: connected, Converted: converted };
+        const callsPeriodData = entries.map((e)=>{
+          const cu = updates.filter((u)=>u.channel==="calls"&&u.update_date>=e.period_start&&u.update_date<=e.period_end);
+          const made      = e.calls_made        + cu.reduce((s:number,u:any)=>s+u.calls_made,0);
+          const fuCalls   = (e.follow_up_calls_made??0) + cu.reduce((s:number,u:any)=>s+(u.follow_up_calls_made??0),0);
+          const demoSch   = (e.demo_scheduled??0)       + cu.reduce((s:number,u:any)=>s+(u.demo_scheduled??0),0);
+          const demoDone  = (e.demo_completed??0)       + cu.reduce((s:number,u:any)=>s+(u.demo_completed??0),0);
+          const demoResch = (e.demo_rescheduled??0)     + cu.reduce((s:number,u:any)=>s+(u.demo_rescheduled??0),0);
+          const fuMeet    = (e.follow_up_meeting_done??0)+cu.reduce((s:number,u:any)=>s+(u.follow_up_meeting_done??0),0);
+          const connected = e.calls_connected   + cu.reduce((s:number,u:any)=>s+u.calls_connected,0);
+          const converted = e.calls_converted   + cu.reduce((s:number,u:any)=>s+u.calls_converted,0);
+          return {
+            name: e.entry_label||new Date(e.period_start).toLocaleDateString("en-IN",{month:"short",day:"numeric"}),
+            "New Calls":made, "Follow Up":fuCalls, "Demo Sched.":demoSch,
+            "Demo Done":demoDone, "Rescheduled":demoResch, "F/U Meeting":fuMeet,
+            Connected:connected, Converted:converted,
+          };
         });
 
         const campConfig: Record<string, { icon: string; color: string; bg: string; border: string; stats: [string, number | string][]; rateA: number; rateB: number; periodData: any[]; lines: [string, string][] }> = {
           "Email Campaign": { icon: "📧", color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", stats: [["Sent", emailSent], ["Opened", emailOpened], ["Clicked", emailClicked], ["Open Rate", `${rate(emailOpened, emailSent)}%`], ["Click Rate", `${rate(emailClicked, emailSent)}%`]], rateA: rate(emailOpened, emailSent), rateB: rate(emailClicked, emailSent), periodData: emailPeriodData, lines: [["Sent", "#6366F1"], ["Opened", "#2563EB"], ["Clicked", "#0891B2"]] },
           "WhatsApp Campaign": { icon: "💬", color: "#16A34A", bg: "#F0FDF4", border: "#A7F3D0", stats: [["Sent", waSent], ["Delivered", waDelivered], ["Replied", waReplied], ["Delivery Rate", `${rate(waDelivered, waSent)}%`], ["Reply Rate", `${rate(waReplied, waSent)}%`]], rateA: rate(waDelivered, waSent), rateB: rate(waReplied, waSent), periodData: waPeriodData, lines: [["Sent", "#6EE7B7"], ["Delivered", "#10B981"], ["Replied", "#059669"]] },
-          "Calls": { icon: "📞", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE", stats: [["Made", callsMade], ["Connected", callsConnected], ["Converted", callsConverted], ["Connect Rate", `${rate(callsConnected, callsMade)}%`], ["Conversion", `${rate(callsConverted, callsMade)}%`]], rateA: rate(callsConnected, callsMade), rateB: rate(callsConverted, callsMade), periodData: callsPeriodData, lines: [["Made", "#C4B5FD"], ["Connected", "#8B5CF6"], ["Converted", "#6D28D9"]] },
+          "Calls": {
+            icon:"📞", color:"#7C3AED", bg:"#F5F3FF", border:"#DDD6FE",
+            stats:[
+              ["New Calls Made",       callsMade],
+              ["Follow Up Call Made",  followUpCallsMade],
+              ["Demo Scheduled",       demoScheduled],
+              ["Demo Completed",       demoCompleted],
+              ["Demo Rescheduled",     demoRescheduled],
+              ["Follow Up Meeting",    followUpMeetingDone],
+              ["Connected",            callsConnected],
+              ["Converted",            callsConverted],
+              ["Demo-to-Complete",     `${rate(demoCompleted,demoScheduled)}%`],
+              ["Conversion Rate",      `${rate(callsConverted,callsMade)}%`],
+            ],
+            rateA:rate(demoScheduled,callsMade),
+            rateB:rate(demoCompleted,demoScheduled),
+            periodData:callsPeriodData,
+            lines:[["New Calls","#C4B5FD"],["Follow Up","#8B5CF6"],["Demo Sched.","#0891B2"],["Demo Done","#16A34A"],["Connected","#3B82F6"],["Converted","#059669"]]
+          },
         };
 
         const cfg = campConfig[campChan];
