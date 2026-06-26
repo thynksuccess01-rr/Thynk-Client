@@ -7,11 +7,11 @@ import {
   ArrowLeft, Upload, Trash2, Download, Bell, Send, FileText,
   FileSpreadsheet, Film, Music, File, Eye, Check, X, Plus,
   TrendingUp, DollarSign, Package, Users, Calendar, Clock,
-  Mail, Phone, MapPin, Activity
+  Mail, Phone, MapPin, Activity, Key, EyeOff
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-const TABS = ["Overview", "Documents", "Notifications", "Login History"];
+const TABS = ["Overview", "Documents", "Notifications", "Users", "Login History"];
 const DOC_CATS = ["general", "report", "contract", "invoice", "media"];
 const NOTIF_TYPES = ["admin_message", "data_update", "document", "lead_update", "system"];
 
@@ -50,6 +50,7 @@ export default function ClientDetailPage() {
   const [documents,    setDocuments]    = useState<any[]>([]);
   const [notifications,setNotifications]= useState<any[]>([]);
   const [loginHistory, setLoginHistory] = useState<any[]>([]);
+  const [clientUsers,  setClientUsers]  = useState<any[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [uploading,    setUploading]    = useState(false);
   const [docCategory,  setDocCategory]  = useState("general");
@@ -60,6 +61,15 @@ export default function ClientDetailPage() {
   const [notifBody,  setNotifBody]  = useState("");
   const [notifType,  setNotifType]  = useState("admin_message");
   const [sendingNotif, setSendingNotif] = useState(false);
+
+  // User management
+  const [addUserModal,  setAddUserModal]  = useState(false);
+  const [newUserForm,   setNewUserForm]   = useState({ full_name: "", email: "", password: "" });
+  const [savingUser,    setSavingUser]    = useState(false);
+  const [showPwd,       setShowPwd]       = useState(false);
+  const [pwdModal,      setPwdModal]      = useState<any>(null);
+  const [newPassword,   setNewPassword]   = useState("");
+  const [savingPwd,     setSavingPwd]     = useState(false);
 
   useEffect(() => { loadAll(); }, [id]);
 
@@ -73,6 +83,7 @@ export default function ClientDetailPage() {
       { data: docs },
       { data: notifs },
       { data: logins },
+      { data: users },
     ] = await Promise.all([
       supabase.from("clients").select("*").eq("id", id).single(),
       supabase.from("client_products").select("products(id,name,category,description)").eq("client_id", id),
@@ -81,6 +92,7 @@ export default function ClientDetailPage() {
       supabase.from("client_documents").select("*").eq("client_id", id).order("created_at", { ascending: false }),
       supabase.from("notifications").select("*").eq("client_id", id).order("created_at", { ascending: false }),
       supabase.from("portal_login_history").select("*").eq("client_id", id).order("logged_in_at", { ascending: false }).limit(50),
+      supabase.from("profiles").select("id,email,full_name,created_at").eq("client_id", id).order("created_at", { ascending: false }),
     ]);
     setClient(c);
     setProducts((mp ?? []).map((m: any) => m.products).filter(Boolean));
@@ -89,14 +101,19 @@ export default function ClientDetailPage() {
     setDocuments(docs ?? []);
     setNotifications(notifs ?? []);
     setLoginHistory(logins ?? []);
+    setClientUsers(users ?? []);
     setLoading(false);
+  }
+
+  async function reloadUsers() {
+    const { data } = await supabase.from("profiles").select("id,email,full_name,created_at").eq("client_id", id).order("created_at", { ascending: false });
+    setClientUsers(data ?? []);
   }
 
   // ── Upload document ────────────────────────────────────────────────────────
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
-    // Ensure storage bucket exists (creates it if missing)
     try {
       await fetch("/api/admin/ensure-bucket", { method: "POST" });
     } catch (_) { /* non-fatal */ }
@@ -115,7 +132,6 @@ export default function ClientDetailPage() {
           continue;
         }
         const { data: urlData } = supabase.storage.from("client-documents").getPublicUrl(path);
-        // Use server-side API route to insert (bypasses RLS, uses service role key)
         const apiRes = await fetch("/api/admin/upload-document", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -169,6 +185,49 @@ export default function ClientDetailPage() {
     setNotifTitle(""); setNotifBody(""); setNotifType("admin_message");
     setSendingNotif(false);
     loadAll();
+  }
+
+  // ── User management ────────────────────────────────────────────────────────
+  async function addUser() {
+    if (!newUserForm.email || !newUserForm.password) { toast.error("Email and password required"); return; }
+    if (newUserForm.password.length < 8) { toast.error("Password must be at least 8 characters"); return; }
+    setSavingUser(true);
+    const res = await fetch("/api/admin/users/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...newUserForm, role: "client", client_id: id }),
+    });
+    const data = await res.json();
+    if (!res.ok) toast.error(data.error ?? "Failed to create user");
+    else {
+      toast.success("User created successfully");
+      setAddUserModal(false);
+      setNewUserForm({ full_name: "", email: "", password: "" });
+      setShowPwd(false);
+      reloadUsers();
+    }
+    setSavingUser(false);
+  }
+
+  async function removeUser(userId: string) {
+    if (!confirm("Remove this user's portal access? This will delete their login.")) return;
+    const res = await fetch(`/api/admin/users/delete?id=${userId}`, { method: "DELETE" });
+    if (res.ok) { toast.success("User removed"); reloadUsers(); }
+    else toast.error("Failed to remove user");
+  }
+
+  async function changePassword() {
+    if (!newPassword || newPassword.length < 8) { toast.error("Min 8 characters"); return; }
+    setSavingPwd(true);
+    const res = await fetch("/api/admin/users/set-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: pwdModal.id, password: newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) toast.error(data.error ?? "Failed");
+    else { toast.success("Password updated"); setPwdModal(null); setNewPassword(""); }
+    setSavingPwd(false);
   }
 
   // ── Derived stats ──────────────────────────────────────────────────────────
@@ -247,7 +306,7 @@ export default function ClientDetailPage() {
           { icon: "₹",  label: "Collected",  value: fmtINR(totalRev),      color: "#16A34A" },
           { icon: "🔮", label: "Expected",   value: fmtINR(expectedRev),   color: "#D97706" },
           { icon: "📦", label: "Licences",   value: totalLic,              color: "#0891B2" },
-          { icon: "📎", label: "Documents",  value: documents.length,      color: "#7C3AED" },
+          { icon: "👥", label: "Users",      value: clientUsers.length,    color: "#7C3AED" },
         ].map((s,i) => (
           <div key={i} style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 10, padding: "12px 10px", textAlign: "center" }}>
             <div style={{ fontSize: 18, marginBottom: 4 }}>{s.icon}</div>
@@ -264,6 +323,7 @@ export default function ClientDetailPage() {
             style={{ padding: "10px 22px", fontSize: 13.5, fontWeight: 600, border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit", color: tab === t ? "#E8611A" : "#78716C", borderBottom: tab === t ? "2px solid #E8611A" : "2px solid transparent", marginBottom: -2, transition: "all 0.15s" }}>
             {t}
             {t === "Notifications" && unreadNotifs > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: "#EF4444", color: "#fff", borderRadius: "50%", padding: "1px 5px", fontWeight: 700 }}>{unreadNotifs}</span>}
+            {t === "Users" && clientUsers.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: "#7C3AED", color: "#fff", borderRadius: "50%", padding: "1px 5px", fontWeight: 700 }}>{clientUsers.length}</span>}
           </button>
         ))}
       </div>
@@ -355,7 +415,7 @@ export default function ClientDetailPage() {
             </div>
           </div>
 
-          {/* Last Data Update */}
+          {/* Period History */}
           <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, overflow: "hidden", gridColumn: "span 2" }}>
             <div style={{ padding: "14px 18px", background: "#F9F8F7", borderBottom: "1px solid #F0EEEC" }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>📋 Period History & Last Data Updates</p>
@@ -392,7 +452,6 @@ export default function ClientDetailPage() {
       {/* ══════════════════ DOCUMENTS ══════════════════ */}
       {tab === "Documents" && (
         <div>
-          {/* Upload area */}
           <div style={{ background: "#fff", border: "2px dashed #E7E5E4", borderRadius: 14, padding: 24, marginBottom: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, alignItems: "flex-end", marginBottom: 14 }}>
               <div>
@@ -419,7 +478,6 @@ export default function ClientDetailPage() {
             </p>
           </div>
 
-          {/* Document list */}
           {documents.length === 0 ? (
             <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 12, padding: "60px 0", textAlign: "center", color: "#A8A29E", fontSize: 13 }}>
               No documents uploaded yet
@@ -465,7 +523,6 @@ export default function ClientDetailPage() {
       {/* ══════════════════ NOTIFICATIONS ══════════════════ */}
       {tab === "Notifications" && (
         <div>
-          {/* Compose */}
           <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 14, padding: 20, marginBottom: 16 }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: "#1C1917", marginBottom: 14 }}>✉️ Send Notification to {client.name}</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
@@ -493,7 +550,6 @@ export default function ClientDetailPage() {
             </div>
           </div>
 
-          {/* Notification history */}
           <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 14, overflow: "hidden" }}>
             <div style={{ padding: "14px 18px", background: "#F9F8F7", borderBottom: "1px solid #F0EEEC", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: "#1C1917" }}>Notification History ({notifications.length})</p>
@@ -525,6 +581,137 @@ export default function ClientDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ══════════════════ USERS ══════════════════ */}
+      {tab === "Users" && (
+        <div>
+          <div style={{ background: "#fff", border: "1px solid #E7E5E4", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid #F5F4F0" }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#1C1917" }}>👥 Portal Users</p>
+                <p style={{ fontSize: 12, color: "#78716C", marginTop: 2 }}>All users who can log in to {client.name}'s client portal</p>
+              </div>
+              <button onClick={() => { setNewUserForm({ full_name: "", email: "", password: "" }); setShowPwd(false); setAddUserModal(true); }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", background: "#E8611A", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                <Plus size={14} /> Add User
+              </button>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "#FAFAF9", borderBottom: "1px solid #F0EEEC" }}>
+                  {["User", "Email", "Added On", "Actions"].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "10px 20px", fontSize: 11.5, fontWeight: 600, color: "#A8A29E" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {clientUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: "center", padding: "52px 0", fontSize: 13, color: "#A8A29E" }}>
+                      No users yet. <button onClick={() => setAddUserModal(true)} style={{ color: "#E8611A", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13, textDecoration: "underline" }}>Add one</button>
+                    </td>
+                  </tr>
+                ) : clientUsers.map(u => (
+                  <tr key={u.id} style={{ borderBottom: "1px solid #F5F4F0" }}>
+                    <td style={{ padding: "12px 20px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#FFF7ED", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#E8611A", flexShrink: 0 }}>
+                          {(u.full_name ?? u.email ?? "?").charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ fontWeight: 600, color: "#1C1917" }}>{u.full_name ?? "—"}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: "12px 20px", color: "#57534E", fontSize: 12.5 }}>{u.email}</td>
+                    <td style={{ padding: "12px 20px", fontSize: 12, color: "#A8A29E" }}>
+                      {new Date(u.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </td>
+                    <td style={{ padding: "12px 20px" }}>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => { setPwdModal(u); setNewPassword(""); setShowPwd(false); }}
+                          style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, cursor: "pointer", fontSize: 12, color: "#2563EB", fontFamily: "inherit" }}>
+                          <Key size={12} /> Password
+                        </button>
+                        <button onClick={() => removeUser(u.id)}
+                          style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6, cursor: "pointer", fontSize: 12, color: "#B91C1C", fontFamily: "inherit" }}>
+                          <Trash2 size={12} /> Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Add User Modal */}
+          {addUserModal && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+              <div style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: "1px solid #F5F4F0" }}>
+                  <div>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1C1917" }}>Add Portal User</h2>
+                    <p style={{ fontSize: 12, color: "#78716C", marginTop: 2 }}>for {client.name}</p>
+                  </div>
+                  <button onClick={() => setAddUserModal(false)} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color="#78716C" /></button>
+                </div>
+                <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#57534E", marginBottom: 5 }}>Full Name</label>
+                    <input className="input" value={newUserForm.full_name} onChange={e => setNewUserForm({ ...newUserForm, full_name: e.target.value })} placeholder="Jane Doe" />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#57534E", marginBottom: 5 }}>Email *</label>
+                    <input className="input" type="email" value={newUserForm.email} onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })} placeholder="user@school.com" />
+                  </div>
+                  <div style={{ position: "relative" }}>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#57534E", marginBottom: 5 }}>Password *</label>
+                    <input className="input" type={showPwd ? "text" : "password"} value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} placeholder="Min 8 characters" style={{ paddingRight: 36 }} />
+                    <button onClick={() => setShowPwd(!showPwd)} style={{ position: "absolute", right: 10, top: 28, background: "transparent", border: "none", cursor: "pointer", padding: 2 }}>
+                      {showPwd ? <EyeOff size={15} color="#A8A29E" /> : <Eye size={15} color="#A8A29E" />}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "14px 20px", borderTop: "1px solid #F5F4F0" }}>
+                  <button onClick={() => setAddUserModal(false)} className="btn-secondary">Cancel</button>
+                  <button onClick={addUser} disabled={savingUser || !newUserForm.email || !newUserForm.password} className="btn-primary">
+                    {savingUser ? "Creating..." : "Create User"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Change Password Modal */}
+          {pwdModal && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+              <div style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 380, boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: "1px solid #F5F4F0" }}>
+                  <div>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1C1917" }}>Set Password</h2>
+                    <p style={{ fontSize: 12, color: "#78716C", marginTop: 2 }}>{pwdModal.email}</p>
+                  </div>
+                  <button onClick={() => { setPwdModal(null); setNewPassword(""); }} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4 }}><X size={18} color="#78716C" /></button>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#57534E", marginBottom: 5 }}>New Password</label>
+                  <div style={{ position: "relative" }}>
+                    <input className="input" type={showPwd ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Min 8 characters" style={{ paddingRight: 36 }} />
+                    <button onClick={() => setShowPwd(!showPwd)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer" }}>
+                      {showPwd ? <EyeOff size={15} color="#A8A29E" /> : <Eye size={15} color="#A8A29E" />}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "14px 20px", borderTop: "1px solid #F5F4F0" }}>
+                  <button onClick={() => { setPwdModal(null); setNewPassword(""); }} className="btn-secondary">Cancel</button>
+                  <button onClick={changePassword} disabled={savingPwd || !newPassword} className="btn-primary">
+                    {savingPwd ? "Saving..." : "Set Password"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
