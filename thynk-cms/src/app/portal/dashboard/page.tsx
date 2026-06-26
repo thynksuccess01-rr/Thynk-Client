@@ -98,22 +98,22 @@ export default function PortalDashboard() {
   const waUpds = updates.filter((u) => u.channel === "whatsapp");
   const callUpds = updates.filter((u) => u.channel === "calls");
 
-  const emailSent = entries.reduce((s, e) => s + e.email_sent, 0) + emailUpds.reduce((s, u) => s + u.email_sent, 0);
-  const emailOpened = entries.reduce((s, e) => s + e.email_opened, 0) + emailUpds.reduce((s, u) => s + u.email_opened, 0);
-  const emailClicked = entries.reduce((s, e) => s + e.email_clicked, 0) + emailUpds.reduce((s, u) => s + u.email_clicked, 0);
-  const waSent = entries.reduce((s, e) => s + e.whatsapp_sent, 0) + waUpds.reduce((s, u) => s + u.whatsapp_sent, 0);
-  const waDelivered = entries.reduce((s, e) => s + e.whatsapp_delivered, 0) + waUpds.reduce((s, u) => s + u.whatsapp_delivered, 0);
-  const waReplied = entries.reduce((s, e) => s + e.whatsapp_replied, 0) + waUpds.reduce((s, u) => s + u.whatsapp_replied, 0);
-  const callsMade = entries.reduce((s, e) => s + e.calls_made, 0) + callUpds.reduce((s, u) => s + u.calls_made, 0);
-  const callsConnected = entries.reduce((s, e) => s + e.calls_connected, 0) + callUpds.reduce((s, u) => s + u.calls_connected, 0);
-  const callsConverted = entries.reduce((s, e) => s + e.calls_converted, 0) + callUpds.reduce((s, u) => s + u.calls_converted, 0);
+  const emailSent = entries.reduce((s, e) => s + e.email_sent, 0);
+  const emailOpened = entries.reduce((s, e) => s + e.email_opened, 0);
+  const emailClicked = entries.reduce((s, e) => s + e.email_clicked, 0);
+  const waSent = entries.reduce((s, e) => s + e.whatsapp_sent, 0);
+  const waDelivered = entries.reduce((s, e) => s + e.whatsapp_delivered, 0);
+  const waReplied = entries.reduce((s, e) => s + e.whatsapp_replied, 0);
+  const callsMade = entries.reduce((s, e) => s + e.calls_made, 0);
+  const callsConnected = entries.reduce((s, e) => s + e.calls_connected, 0);
+  const callsConverted = entries.reduce((s, e) => s + e.calls_converted, 0);
 
   // ── New call activity metrics ─────────────────────────────────────────────
-  const followUpCallsMade   = entries.reduce((s,e)=>s+(e.follow_up_calls_made??0),0)   + callUpds.reduce((s,u)=>s+(u.follow_up_calls_made??0),0);
-  const demoScheduled       = entries.reduce((s,e)=>s+(e.demo_scheduled??0),0)         + callUpds.reduce((s,u)=>s+(u.demo_scheduled??0),0);
-  const demoCompleted       = entries.reduce((s,e)=>s+(e.demo_completed??0),0)         + callUpds.reduce((s,u)=>s+(u.demo_completed??0),0);
-  const demoRescheduled     = entries.reduce((s,e)=>s+(e.demo_rescheduled??0),0)       + callUpds.reduce((s,u)=>s+(u.demo_rescheduled??0),0);
-  const followUpMeetingDone = entries.reduce((s,e)=>s+(e.follow_up_meeting_done??0),0) + callUpds.reduce((s,u)=>s+(u.follow_up_meeting_done??0),0);
+  const followUpCallsMade   = entries.reduce((s,e)=>s+(e.follow_up_calls_made??0),0);
+  const demoScheduled       = entries.reduce((s,e)=>s+(e.demo_scheduled??0),0);
+  const demoCompleted       = entries.reduce((s,e)=>s+(e.demo_completed??0),0);
+  const demoRescheduled     = entries.reduce((s,e)=>s+(e.demo_rescheduled??0),0);
+  const followUpMeetingDone = entries.reduce((s,e)=>s+(e.follow_up_meeting_done??0),0);
 
   const totalRev = entries.reduce((s, e) => s + (e.total_revenue_collected ?? 0), 0);
   const expectedRev = entries.reduce((s, e) => s + (e.expected_collection ?? 0), 0);
@@ -130,9 +130,9 @@ export default function PortalDashboard() {
     const cu = pu.filter((u) => u.channel === "calls");
     return {
       name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
-      Email: e.email_sent + eu.reduce((s: number, u: any) => s + u.email_sent, 0),
-      WA: e.whatsapp_sent + wu.reduce((s: number, u: any) => s + u.whatsapp_sent, 0),
-      Calls: e.calls_made + cu.reduce((s: number, u: any) => s + u.calls_made, 0),
+      Email: e.email_sent,
+      WA: e.whatsapp_sent,
+      Calls: e.calls_made,
       Revenue: e.total_revenue_collected ?? 0,
       Licences: e.total_licences ?? 0,
     };
@@ -478,28 +478,28 @@ export default function PortalDashboard() {
         // Period-level breakdown per channel
         const emailPeriodData = entries.map((e) => {
           const eu = updates.filter((u) => u.channel === "email" && u.update_date >= e.period_start && u.update_date <= e.period_end);
-          const sent = e.email_sent + eu.reduce((s: number, u: any) => s + u.email_sent, 0);
-          const opened = e.email_opened + eu.reduce((s: number, u: any) => s + u.email_opened, 0);
-          const clicked = e.email_clicked + eu.reduce((s: number, u: any) => s + u.email_clicked, 0);
+          const sent = e.email_sent;
+          const opened = e.email_opened;
+          const clicked = e.email_clicked;
           return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: sent, Opened: opened, Clicked: clicked };
         });
         const waPeriodData = entries.map((e) => {
           const wu = updates.filter((u) => u.channel === "whatsapp" && u.update_date >= e.period_start && u.update_date <= e.period_end);
-          const sent = e.whatsapp_sent + wu.reduce((s: number, u: any) => s + u.whatsapp_sent, 0);
-          const delivered = e.whatsapp_delivered + wu.reduce((s: number, u: any) => s + u.whatsapp_delivered, 0);
-          const replied = e.whatsapp_replied + wu.reduce((s: number, u: any) => s + u.whatsapp_replied, 0);
+          const sent = e.whatsapp_sent;
+          const delivered = e.whatsapp_delivered;
+          const replied = e.whatsapp_replied;
           return { name: e.entry_label || new Date(e.period_start).toLocaleDateString("en-IN", { month: "short", day: "numeric" }), Sent: sent, Delivered: delivered, Replied: replied };
         });
         const callsPeriodData = entries.map((e)=>{
           const cu = updates.filter((u)=>u.channel==="calls"&&u.update_date>=e.period_start&&u.update_date<=e.period_end);
-          const made      = e.calls_made        + cu.reduce((s:number,u:any)=>s+u.calls_made,0);
-          const fuCalls   = (e.follow_up_calls_made??0) + cu.reduce((s:number,u:any)=>s+(u.follow_up_calls_made??0),0);
-          const demoSch   = (e.demo_scheduled??0)       + cu.reduce((s:number,u:any)=>s+(u.demo_scheduled??0),0);
-          const demoDone  = (e.demo_completed??0)       + cu.reduce((s:number,u:any)=>s+(u.demo_completed??0),0);
-          const demoResch = (e.demo_rescheduled??0)     + cu.reduce((s:number,u:any)=>s+(u.demo_rescheduled??0),0);
-          const fuMeet    = (e.follow_up_meeting_done??0)+cu.reduce((s:number,u:any)=>s+(u.follow_up_meeting_done??0),0);
-          const connected = e.calls_connected   + cu.reduce((s:number,u:any)=>s+u.calls_connected,0);
-          const converted = e.calls_converted   + cu.reduce((s:number,u:any)=>s+u.calls_converted,0);
+          const made      = e.calls_made;
+          const fuCalls   = (e.follow_up_calls_made??0);
+          const demoSch   = (e.demo_scheduled??0);
+          const demoDone  = (e.demo_completed??0);
+          const demoResch = (e.demo_rescheduled??0);
+          const fuMeet    = (e.follow_up_meeting_done??0);
+          const connected = e.calls_connected;
+          const converted = e.calls_converted;
           return {
             name: e.entry_label||new Date(e.period_start).toLocaleDateString("en-IN",{month:"short",day:"numeric"}),
             "New Calls":made, "Follow Up":fuCalls, "Demo Sched.":demoSch,
