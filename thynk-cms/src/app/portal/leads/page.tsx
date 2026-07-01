@@ -2,21 +2,10 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Search, Download, MapPin, Phone, Mail, User, TrendingUp, CheckCircle, XCircle, Clock, DollarSign, Package } from "lucide-react";
-
-const STATUS_META: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-  new:         { bg: "#EEF2FF", text: "#4338CA", border: "#C7D2FE", dot: "#6366F1" },
-  contacted:   { bg: "#FFFBEB", text: "#92400E", border: "#FDE68A", dot: "#F59E0B" },
-  qualified:   { bg: "#FFF7ED", text: "#C2410C", border: "#FED7AA", dot: "#F97316" },
-  proposal:    { bg: "#F5F3FF", text: "#6D28D9", border: "#DDD6FE", dot: "#8B5CF6" },
-  negotiation: { bg: "#FEF3C7", text: "#92400E", border: "#FDE68A", dot: "#F59E0B" },
-  won:         { bg: "#DCFCE7", text: "#15803D", border: "#BBF7D0", dot: "#16A34A" },
-  lost:        { bg: "#FEE2E2", text: "#B91C1C", border: "#FECACA", dot: "#EF4444" },
-};
+import { useDropdownOptions, getOptionMeta } from "@/lib/dropdowns";
 
 const fmtINR = (n: number) =>
   `₹${n >= 100000 ? `${(n / 100000).toFixed(1)}L` : n >= 1000 ? `${(n / 1000).toFixed(0)}K` : n}`;
-
-const STATUSES = ["all", "new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"];
 
 export default function PortalLeadsPage() {
   const [leads,   setLeads]   = useState<any[]>([]);
@@ -26,6 +15,12 @@ export default function PortalLeadsPage() {
   const [accent,  setAccent]  = useState("#E8611A");
   const [primary, setPrimary] = useState("#1C1917");
   const supabase = createClient();
+  const { options: statusOptions } = useDropdownOptions("lead_status");
+  const STATUSES = ["all", ...statusOptions.map(s => s.value)];
+  const statusMeta = (value: string) => {
+    const m = getOptionMeta(statusOptions, value);
+    return { bg: m.color_bg ?? "#F5F4F0", text: m.color_text ?? "#78716C", border: m.color_bg ?? "#E7E5E4", dot: m.color_text ?? "#A8A29E", label: m.label };
+  };
 
   useEffect(() => {
     async function load() {
@@ -141,7 +136,7 @@ export default function PortalLeadsPage() {
             if (!count) return null;
             return (
               <div key={s} title={`${s}: ${count}`}
-                style={{ flex: count, background: STATUS_META[s]?.dot, borderRadius: 2, minWidth: 4, transition: "flex 0.3s" }} />
+                style={{ flex: count, background: statusMeta(s).dot, borderRadius: 2, minWidth: 4, transition: "flex 0.3s" }} />
             );
           })}
         </div>
@@ -151,8 +146,8 @@ export default function PortalLeadsPage() {
             if (!count) return null;
             return (
               <span key={s} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#57534E" }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_META[s]?.dot, display: "inline-block" }} />
-                {s.charAt(0).toUpperCase() + s.slice(1)} <strong style={{ color: "#1C1917" }}>{count}</strong>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: statusMeta(s).dot, display: "inline-block" }} />
+                {statusMeta(s).label} <strong style={{ color: "#1C1917" }}>{count}</strong>
               </span>
             );
           })}
@@ -173,11 +168,11 @@ export default function PortalLeadsPage() {
           {STATUSES.map(s => {
             const count = s === "all" ? leads.length : leads.filter(l => l.status === s).length;
             const active = filter === s;
-            const meta = STATUS_META[s];
+            const meta = statusMeta(s);
             return (
               <button key={s} onClick={() => setFilter(s)}
                 style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, border: "none", borderRadius: 7, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s", background: active ? (meta?.bg ?? primary) : "transparent", color: active ? (meta?.text ?? "#fff") : "#78716C", whiteSpace: "nowrap" }}>
-                {s.charAt(0).toUpperCase() + s.slice(1)}
+                {s === "all" ? "All" : statusMeta(s).label}
                 <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.8 }}>({count})</span>
               </button>
             );
@@ -198,7 +193,7 @@ export default function PortalLeadsPage() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {filtered.map(l => {
-            const meta = STATUS_META[l.status] ?? STATUS_META.new;
+            const meta = statusMeta(l.status);
             const entry = l.data_entries;
             const daysSince = Math.floor((Date.now() - new Date(l.status_updated_at || l.created_at).getTime()) / 86400000);
             const isStale = !["won","lost"].includes(l.status) && daysSince > 30;
@@ -215,7 +210,7 @@ export default function PortalLeadsPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
                         <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1C1917", margin: 0 }}>{l.name}</h3>
                         <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: meta.bg, color: meta.text, border: `1px solid ${meta.border}` }}>
-                          {l.status.charAt(0).toUpperCase() + l.status.slice(1)}
+                          {meta.label}
                         </span>
                         {l.is_updated_this_cycle && (
                           <span style={{ fontSize: 10, fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "2px 7px", borderRadius: 8 }}>↑ UPDATED</span>

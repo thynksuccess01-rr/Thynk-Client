@@ -4,18 +4,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Search, Trash2, ChevronDown, Edit2, X, Save, Clock } from "lucide-react";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { useDropdownOptions, getOptionMeta } from "@/lib/dropdowns";
 
-const LEAD_STATUSES = ["all","new","contacted","qualified","proposal","negotiation","won","lost"];
-const EDIT_STATUSES = ["new","contacted","qualified","proposal","negotiation","won","lost"];
-const STATUS_COLOR: Record<string,{bg:string,text:string}> = {
-  new:         { bg:"#EEF2FF", text:"#4338CA" },
-  contacted:   { bg:"#FFFBEB", text:"#B45309" },
-  qualified:   { bg:"#FFF7ED", text:"#C2410C" },
-  proposal:    { bg:"#F5F3FF", text:"#6D28D9" },
-  negotiation: { bg:"#FEF3C7", text:"#92400E" },
-  won:         { bg:"#DCFCE7", text:"#15803D" },
-  lost:        { bg:"#FEE2E2", text:"#B91C1C" },
-};
 const fmtINR = (n: number) => `₹${n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:n}`;
 
 const EMPTY_EDIT = {
@@ -38,6 +28,7 @@ export default function AdminLeadsPage() {
   const [editForm,  setEditForm]  = useState<typeof EMPTY_EDIT>(EMPTY_EDIT);
   const [saving,    setSaving]    = useState(false);
   const supabase = createClient();
+  const { options: statusOptions } = useDropdownOptions("lead_status");
 
   useEffect(() => {
     supabase.from("clients").select("id,name").eq("is_active",true).order("name").then(r=>setClients(r.data??[]));
@@ -196,7 +187,7 @@ export default function AdminLeadsPage() {
         </div>
         {[
           { value:selClient, set:(v:string)=>{setSelClient(v);setSelPeriod("all");}, opts:[{v:"all",l:"All Clients"},...clients.map(c=>({v:c.id,l:c.name}))], w:140 },
-          { value:selStatus, set:(v:string)=>setSelStatus(v), opts:LEAD_STATUSES.map(s=>({v:s,l:s==="all"?"All Statuses":s.charAt(0).toUpperCase()+s.slice(1)})), w:130 },
+          { value:selStatus, set:(v:string)=>setSelStatus(v), opts:[{v:"all",l:"All Statuses"},...statusOptions.map(s=>({v:s.value,l:s.label}))], w:130 },
         ].map((sel,i)=>(
           <div key={i} style={{position:"relative"}}>
             <select value={sel.value} onChange={e=>sel.set(e.target.value)}
@@ -251,8 +242,8 @@ export default function AdminLeadsPage() {
                       </td>
                       <td style={{padding:"10px 12px"}}>
                         <select value={l.status} onChange={e=>updateStatus(l.id,e.target.value,l.status)}
-                          style={{appearance:"none",padding:"3px 8px",borderRadius:8,fontSize:11.5,fontWeight:600,background:STATUS_COLOR[l.status]?.bg,color:STATUS_COLOR[l.status]?.text,border:"none",cursor:"pointer",fontFamily:"inherit"}}>
-                          {EDIT_STATUSES.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                          style={{appearance:"none",padding:"3px 8px",borderRadius:8,fontSize:11.5,fontWeight:600,background:getOptionMeta(statusOptions,l.status).color_bg??undefined,color:getOptionMeta(statusOptions,l.status).color_text??undefined,border:"none",cursor:"pointer",fontFamily:"inherit"}}>
+                          {statusOptions.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
                       </td>
                       <td style={{padding:"10px 12px",color:"#78716C",fontSize:12.5}}>{l.location??"—"}</td>
@@ -338,7 +329,7 @@ export default function AdminLeadsPage() {
               <div style={{marginBottom:16}}>
                 <label style={{display:"block",fontSize:11.5,fontWeight:500,color:"#78716C",marginBottom:4}}>Status</label>
                 <select className="input" value={editForm.status} onChange={e=>setEditForm(p=>({...p,status:e.target.value}))} style={{fontSize:13,maxWidth:200}}>
-                  {EDIT_STATUSES.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                  {statusOptions.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
 

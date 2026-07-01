@@ -3,15 +3,8 @@ import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Bell, Send, Trash2, Search, Check, Filter } from "lucide-react";
 import toast from "react-hot-toast";
+import { useDropdownOptions, getOptionMeta } from "@/lib/dropdowns";
 
-const NOTIF_TYPES = ["admin_message","data_update","document","lead_update","system"];
-const NOTIF_META: Record<string,{icon:string,color:string,bg:string}> = {
-  admin_message: { icon:"💬", color:"#4338CA", bg:"#EEF2FF" },
-  data_update:   { icon:"📊", color:"#15803D", bg:"#DCFCE7" },
-  document:      { icon:"📎", color:"#7C3AED", bg:"#F5F3FF" },
-  lead_update:   { icon:"🎯", color:"#B45309", bg:"#FFFBEB" },
-  system:        { icon:"🔔", color:"#0891B2", bg:"#ECFEFF" },
-};
 const fmtDate = (d:string) => new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 
 export default function NotificationControlPanel() {
@@ -29,6 +22,7 @@ export default function NotificationControlPanel() {
   const [broadcastAll, setBroadcastAll] = useState(false);
   const [sending,      setSending]      = useState(false);
   const supabase = createClient();
+  const { options: notifTypeOptions } = useDropdownOptions("notification_type");
 
   useEffect(() => {
     supabase.from("clients").select("id,name").eq("is_active",true).order("name").then(r=>setClients(r.data??[]));
@@ -141,7 +135,7 @@ export default function NotificationControlPanel() {
             <label style={{display:"block",fontSize:12,fontWeight:600,color:"#57534E",marginBottom:5}}>Type</label>
             <select value={compType} onChange={e=>setCompType(e.target.value)}
               style={{width:"100%",padding:"9px 12px",border:"1px solid #E7E5E4",borderRadius:8,fontSize:13,fontFamily:"inherit",background:"#fff"}}>
-              {NOTIF_TYPES.map(t=><option key={t} value={t}>{t.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase())}</option>)}
+              {notifTypeOptions.map(t=><option key={t.value} value={t.value}>{t.icon?`${t.icon} `:""}{t.label}</option>)}
             </select>
           </div>
 
@@ -198,7 +192,7 @@ export default function NotificationControlPanel() {
             <select value={selType} onChange={e=>setSelType(e.target.value)}
               style={{padding:"7px 10px",border:"1px solid #E7E5E4",borderRadius:7,fontSize:12.5,fontFamily:"inherit",background:"#fff",cursor:"pointer"}}>
               <option value="all">All Types</option>
-              {NOTIF_TYPES.map(t=><option key={t} value={t}>{t.replace(/_/g," ")}</option>)}
+              {notifTypeOptions.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
             <p style={{fontSize:12,color:"#A8A29E",whiteSpace:"nowrap"}}>{filtered.length} items</p>
           </div>
@@ -210,14 +204,14 @@ export default function NotificationControlPanel() {
           ) : (
             <div style={{maxHeight:600,overflowY:"auto"}}>
               {filtered.map(n=>{
-                const meta = NOTIF_META[n.type]??NOTIF_META.system;
+                const meta = getOptionMeta(notifTypeOptions,n.type);
                 return (
                   <div key={n.id} style={{padding:"12px 16px",borderBottom:"1px solid #F5F4F0",display:"flex",alignItems:"flex-start",gap:10,background:n.is_read?"#fff":"#FFFBEB"}}>
-                    <div style={{width:34,height:34,borderRadius:8,background:meta.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{meta.icon}</div>
+                    <div style={{width:34,height:34,borderRadius:8,background:meta.color_bg??"#F5F4F0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{meta.icon??"🔔"}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
                         <p style={{fontSize:12.5,fontWeight:600,color:"#1C1917"}}>{n.title}</p>
-                        <span style={{fontSize:10,padding:"1px 5px",borderRadius:5,background:meta.bg,color:meta.color,fontWeight:600}}>{n.type.replace(/_/g," ")}</span>
+                        <span style={{fontSize:10,padding:"1px 5px",borderRadius:5,background:meta.color_bg??"#F5F4F0",color:meta.color_text??"#78716C",fontWeight:600}}>{meta.label}</span>
                         <span style={{fontSize:11,color:"#A8A29E",background:"#F5F4F0",padding:"1px 6px",borderRadius:5}}>{(n as any).clients?.name||"—"}</span>
                         {!n.is_read&&<span style={{width:6,height:6,borderRadius:"50%",background:"#F59E0B",display:"inline-block"}}/>}
                       </div>

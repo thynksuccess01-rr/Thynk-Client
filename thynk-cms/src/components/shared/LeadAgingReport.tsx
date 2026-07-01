@@ -2,16 +2,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Search, Download, AlertTriangle, CheckCircle2, XCircle, TrendingUp } from "lucide-react";
+import { useDropdownOptions, getOptionMeta, DropdownOption } from "@/lib/dropdowns";
 
-const STATUS_COLOR: Record<string,{bg:string,text:string}> = {
-  new:         { bg:"#EEF2FF", text:"#4338CA" },
-  contacted:   { bg:"#FFFBEB", text:"#B45309" },
-  qualified:   { bg:"#FFF7ED", text:"#C2410C" },
-  proposal:    { bg:"#F5F3FF", text:"#6D28D9" },
-  negotiation: { bg:"#FEF3C7", text:"#92400E" },
-  won:         { bg:"#DCFCE7", text:"#15803D" },
-  lost:        { bg:"#FEE2E2", text:"#B91C1C" },
-};
 const fmtINR = (n: number) => `₹${n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:n}`;
 const daysSince = (d: string) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 
@@ -30,6 +22,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
   const [loading,   setLoading]   = useState(true);
   const [view,      setView]      = useState<"aging"|"history">("aging");
   const supabase = createClient();
+  const { options: statusOptions } = useDropdownOptions("lead_status");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,7 +101,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
     periodMap.get(k)!.push(l);
   });
 
-  const STATUSES = ["all","new","contacted","qualified","proposal","negotiation","won","lost"];
+  const STATUSES = ["all",...statusOptions.map(s=>s.value)];
 
   return (
     <div>
@@ -161,7 +154,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
         )}
         <select value={selStatus} onChange={e=>setSelStatus(e.target.value)}
           style={{padding:"8px 12px",border:"1px solid #E7E5E4",borderRadius:8,fontSize:13,fontFamily:"inherit",background:"#fff",color:"#1C1917",cursor:"pointer"}}>
-          {STATUSES.map(s=><option key={s} value={s}>{s==="all"?"All Statuses":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+          {STATUSES.map(s=><option key={s} value={s}>{s==="all"?"All Statuses":getOptionMeta(statusOptions,s).label}</option>)}
         </select>
         <div style={{display:"flex",gap:4,background:"#fff",border:"1px solid #E7E5E4",borderRadius:8,padding:3}}>
           {(["aging","history"] as const).map(v=>(
@@ -195,7 +188,8 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
                   const age = daysSince(l.status_updated_at||l.created_at);
                   const entry = l.data_entries;
                   const isStale = !["won","lost"].includes(l.status)&&age>30;
-                  const sc = STATUS_COLOR[l.status]??{bg:"#F5F4F0",text:"#78716C"};
+                  const scMeta = getOptionMeta(statusOptions,l.status);
+                  const sc = {bg:scMeta.color_bg??"#F5F4F0",text:scMeta.color_text??"#78716C"};
                   return (
                     <tr key={l.id} style={{borderBottom:"1px solid #FAFAF9",background:isStale?"#FFFBEB":l.is_updated_this_cycle?"#F0FDF4":"transparent"}}>
                       <td style={{padding:"11px 12px"}}>
@@ -205,7 +199,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
                       </td>
                       {isAdmin&&<td style={{padding:"11px 12px",color:"#78716C",fontSize:12}}>{(l as any).clients?.name||"—"}</td>}
                       <td style={{padding:"11px 12px"}}>
-                        <span style={{fontSize:11.5,padding:"3px 9px",borderRadius:10,fontWeight:600,background:sc.bg,color:sc.text}}>{l.status.charAt(0).toUpperCase()+l.status.slice(1)}</span>
+                        <span style={{fontSize:11.5,padding:"3px 9px",borderRadius:10,fontWeight:600,background:sc.bg,color:sc.text}}>{scMeta.label}</span>
                       </td>
                       <td style={{padding:"11px 12px",fontSize:12}}>
                         {entry?<span style={{background:"#EEF2FF",color:"#4338CA",padding:"2px 7px",borderRadius:6,fontSize:11.5,fontWeight:500}}>{entry.entry_label||new Date(entry.period_start).toLocaleDateString("en-IN",{month:"short",year:"numeric"})}</span>:<span style={{color:"#D6D3D1"}}>—</span>}
@@ -236,12 +230,12 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
         /* Period History */
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {periodMap.has("__none__")&&(
-            <PeriodGroup title="No Period Assigned" leads={periodMap.get("__none__")!} isAdmin={isAdmin}/>
+            <PeriodGroup title="No Period Assigned" leads={periodMap.get("__none__")!} isAdmin={isAdmin} statusOptions={statusOptions}/>
           )}
           {entries.map(e=>{
             const pl = periodMap.get(e.id);
             if(!pl?.length) return null;
-            return <PeriodGroup key={e.id} title={e.entry_label||`${e.period_start} – ${e.period_end}`} subtitle={`${e.period_start} – ${e.period_end}`} leads={pl} isAdmin={isAdmin}/>;
+            return <PeriodGroup key={e.id} title={e.entry_label||`${e.period_start} – ${e.period_end}`} subtitle={`${e.period_start} – ${e.period_end}`} leads={pl} isAdmin={isAdmin} statusOptions={statusOptions}/>;
           })}
           {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:"#A8A29E",fontSize:13}}>No data found</div>}
         </div>
@@ -250,12 +244,11 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
   );
 }
 
-function PeriodGroup({title,subtitle,leads,isAdmin}:{title:string,subtitle?:string,leads:any[],isAdmin:boolean}) {
+function PeriodGroup({title,subtitle,leads,isAdmin,statusOptions}:{title:string,subtitle?:string,leads:any[],isAdmin:boolean,statusOptions:DropdownOption[]}) {
   const won = leads.filter(l=>l.status==="won").length;
   const active = leads.filter(l=>!["won","lost"].includes(l.status)).length;
   const fmtINR=(n:number)=>`₹${n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:n}`;
   const daysSince=(d:string)=>Math.floor((Date.now()-new Date(d).getTime())/86400000);
-  const STATUS_COLOR2:Record<string,{bg:string,text:string}>={new:{bg:"#EEF2FF",text:"#4338CA"},contacted:{bg:"#FFFBEB",text:"#B45309"},qualified:{bg:"#FFF7ED",text:"#C2410C"},proposal:{bg:"#F5F3FF",text:"#6D28D9"},negotiation:{bg:"#FEF3C7",text:"#92400E"},won:{bg:"#DCFCE7",text:"#15803D"},lost:{bg:"#FEE2E2",text:"#B91C1C"}};
   return (
     <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:12,overflow:"hidden"}}>
       <div style={{padding:"12px 16px",background:"#F5F4F0",borderBottom:"1px solid #E7E5E4",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -275,7 +268,8 @@ function PeriodGroup({title,subtitle,leads,isAdmin}:{title:string,subtitle?:stri
           <tbody>
             {leads.map(l=>{
               const age=daysSince(l.status_updated_at||l.created_at);
-              const sc=STATUS_COLOR2[l.status]??{bg:"#F5F4F0",text:"#78716C"};
+              const scMeta=getOptionMeta(statusOptions,l.status);
+              const sc={bg:scMeta.color_bg??"#F5F4F0",text:scMeta.color_text??"#78716C"};
               return (
                 <tr key={l.id} style={{borderBottom:"1px solid #FAFAF9",background:l.is_updated_this_cycle?"#FFFBEB":"transparent"}}>
                   <td style={{padding:"9px 12px",fontWeight:600,color:"#1C1917"}}>
@@ -283,7 +277,7 @@ function PeriodGroup({title,subtitle,leads,isAdmin}:{title:string,subtitle?:stri
                     {(l.country||l.state)&&<span style={{fontSize:11,color:"#A8A29E",fontWeight:400,marginLeft:5}}>{[l.country,l.state].filter(Boolean).join(", ")}</span>}
                   </td>
                   {isAdmin&&<td style={{padding:"9px 12px",color:"#78716C",fontSize:12}}>{(l as any).clients?.name||"—"}</td>}
-                  <td style={{padding:"9px 12px"}}><span style={{fontSize:11.5,padding:"2px 8px",borderRadius:8,fontWeight:600,background:sc.bg,color:sc.text}}>{l.status.charAt(0).toUpperCase()+l.status.slice(1)}</span></td>
+                  <td style={{padding:"9px 12px"}}><span style={{fontSize:11.5,padding:"2px 8px",borderRadius:8,fontWeight:600,background:sc.bg,color:sc.text}}>{scMeta.label}</span></td>
                   <td style={{padding:"9px 12px",color:"#78716C",fontSize:12}}>{[l.country,l.state,l.location].filter(Boolean).join(", ")||"—"}</td>
                   <td style={{padding:"9px 12px",fontSize:12}}>
                     {l.contact_person?<span style={{fontWeight:500}}>{l.contact_person}</span>:<span style={{color:"#D6D3D1"}}>—</span>}

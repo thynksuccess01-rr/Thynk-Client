@@ -5,15 +5,10 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, Save, Trash2, ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
+import { useDropdownOptions, getOptionMeta, DropdownOption } from "@/lib/dropdowns";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const LEAD_STATUSES = ["new","contacted","qualified","proposal","negotiation","won","lost"] as const;
-type LeadStatus = (typeof LEAD_STATUSES)[number];
-
-const STATUS_COLOR: Record<LeadStatus, string> = {
-  new:"#3B82F6", contacted:"#F59E0B", qualified:"#F97316",
-  proposal:"#8B5CF6", negotiation:"#F97316", won:"#16A34A", lost:"#EF4444",
-};
+type LeadStatus = string;
 
 const CALL_METRICS = [
   { key:"calls_made",             label:"New Calls Made",         icon:"📞", color:"#7C3AED", bg:"#F5F3FF" },
@@ -103,6 +98,8 @@ export default function DataPanelPage() {
   const [openSection,   setOpenSection]   = useState<string>("period");
 
   const supabase = createClient();
+  const { options: statusOptions } = useDropdownOptions("lead_status");
+  const { options: channelOptions } = useDropdownOptions("campaign_channel");
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -462,9 +459,7 @@ export default function DataPanelPage() {
                               setNewUpdate(p=>({...p, channel:ch}));
                             }}
                             style={{fontSize:13,minWidth:160}}>
-                            <option value="email">📧 Email</option>
-                            <option value="whatsapp">💬 WhatsApp</option>
-                            <option value="calls">📞 Calls</option>
+                            {channelOptions.map(c=><option key={c.value} value={c.value}>{c.icon?`${c.icon} `:""}{c.label}</option>)}
                           </select>
                         </div>
                         <div>
@@ -718,7 +713,8 @@ export default function DataPanelPage() {
                     onOpenForm={()=>setShowLeadForm(true)}
                     onCloseForm={()=>setShowLeadForm(false)}
                     onChange={(k,v)=>setNewLead(p=>({...p,[k]:v}))}
-                    onSave={saveLead} onDelete={deleteLead} onUpdateStatus={updateLeadStatus}/>
+                    onSave={saveLead} onDelete={deleteLead} onUpdateStatus={updateLeadStatus}
+                    statusOptions={statusOptions}/>
                 </CollapsibleSection>
               )}
 
@@ -1079,10 +1075,11 @@ function CampaignSection({updates,acc,showForm,newUpdate,onOpenForm,onCloseForm,
 }
 
 // ─── LeadsSection ─────────────────────────────────────────────────────────────
-function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm,onChange,onSave,onDelete,onUpdateStatus}:{
+function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm,onChange,onSave,onDelete,onUpdateStatus,statusOptions}:{
   leads:Lead[];activeEntry:string|null;showForm:boolean;newLead:LeadForm;
   onOpenForm:()=>void;onCloseForm:()=>void;onChange:(k:keyof LeadForm,v:string)=>void;
   onSave:()=>void;onDelete:(id:string)=>void;onUpdateStatus:(id:string,ns:string,os:string)=>void;
+  statusOptions:DropdownOption[];
 }) {
   const fields:[string,keyof LeadForm,string,string][] = [
     ["Lead Name *","name","text",""],["Country","country","text","India"],
@@ -1112,7 +1109,7 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
               <label style={lbl}>Status</label>
               <select className="input" value={newLead.status}
                 onChange={e=>onChange("status",e.target.value)} style={{fontSize:13}}>
-                {LEAD_STATUSES.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                {statusOptions.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
           </div>
@@ -1157,9 +1154,9 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
                   <td style={{padding:"9px 10px"}}>
                     <select value={l.status} onChange={e=>onUpdateStatus(l.id,e.target.value,l.status)}
                       style={{appearance:"none",padding:"3px 8px",borderRadius:8,fontSize:11.5,fontWeight:600,
-                        background:`${STATUS_COLOR[l.status]}15`,color:STATUS_COLOR[l.status],
+                        background:getOptionMeta(statusOptions,l.status).color_bg??"#F5F4F0",color:getOptionMeta(statusOptions,l.status).color_text??"#78716C",
                         border:"none",cursor:"pointer",fontFamily:"inherit"}}>
-                      {LEAD_STATUSES.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+                      {statusOptions.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                   </td>
                   <td style={{padding:"9px 10px",color:"#A8A29E",fontSize:12}}>{l.cycle_label??"—"}</td>

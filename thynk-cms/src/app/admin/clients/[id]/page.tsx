@@ -10,10 +10,9 @@ import {
   Mail, Phone, MapPin, Activity, Key, EyeOff
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useDropdownOptions, getOptionMeta } from "@/lib/dropdowns";
 
 const TABS = ["Overview", "Documents", "Notifications", "Users", "Login History"];
-const DOC_CATS = ["general", "report", "contract", "invoice", "media"];
-const NOTIF_TYPES = ["admin_message", "data_update", "document", "lead_update", "system"];
 
 const fmtINR = (n: number) => `₹${n >= 100000 ? `${(n / 100000).toFixed(1)}L` : n >= 1000 ? `${(n / 1000).toFixed(0)}K` : n}`;
 const fmtSize = (b: number) => b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b > 1024 ? `${(b / 1024).toFixed(0)} KB` : `${b} B`;
@@ -28,18 +27,12 @@ function FileIcon({ type }: { type: string }) {
   return <File size={20} color="#78716C" />;
 }
 
-const NOTIF_META: Record<string, { icon: string; color: string; bg: string }> = {
-  admin_message: { icon: "💬", color: "#4338CA", bg: "#EEF2FF" },
-  data_update:   { icon: "📊", color: "#15803D", bg: "#DCFCE7" },
-  document:      { icon: "📎", color: "#7C3AED", bg: "#F5F3FF" },
-  lead_update:   { icon: "🎯", color: "#B45309", bg: "#FFFBEB" },
-  system:        { icon: "🔔", color: "#0891B2", bg: "#ECFEFF" },
-};
-
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const supabase = createClient();
+  const { options: docCatOptions } = useDropdownOptions("document_category");
+  const { options: notifTypeOptions } = useDropdownOptions("notification_type");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tab,          setTab]          = useState("Overview");
@@ -458,7 +451,7 @@ export default function ClientDetailPage() {
                 <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#57534E", marginBottom: 5 }}>Category</label>
                 <select value={docCategory} onChange={e => setDocCategory(e.target.value)}
                   style={{ width: "100%", padding: "9px 12px", border: "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", background: "#fff", cursor: "pointer" }}>
-                  {DOC_CATS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                  {docCatOptions.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               <div>
@@ -530,7 +523,7 @@ export default function ClientDetailPage() {
                 <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#57534E", marginBottom: 5 }}>Type</label>
                 <select value={notifType} onChange={e => setNotifType(e.target.value)}
                   style={{ width: "100%", padding: "9px 12px", border: "1px solid #E7E5E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", background: "#fff" }}>
-                  {NOTIF_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase())}</option>)}
+                  {notifTypeOptions.map(t => <option key={t.value} value={t.value}>{t.icon?`${t.icon} `:""}{t.label}</option>)}
                 </select>
               </div>
               <div>
@@ -560,16 +553,16 @@ export default function ClientDetailPage() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {notifications.map(n => {
-                  const meta = NOTIF_META[n.type] ?? NOTIF_META.system;
+                  const meta = getOptionMeta(notifTypeOptions, n.type);
                   return (
                     <div key={n.id} style={{ padding: "14px 18px", borderBottom: "1px solid #F5F4F0", display: "flex", alignItems: "flex-start", gap: 12, background: n.is_read ? "#fff" : "#FFFBEB" }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 9, background: meta.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
-                        {meta.icon}
+                      <div style={{ width: 36, height: 36, borderRadius: 9, background: meta.color_bg ?? "#F5F4F0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
+                        {meta.icon ?? "🔔"}
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                           <p style={{ fontSize: 13, fontWeight: 600, color: "#1C1917" }}>{n.title}</p>
-                          <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 6, background: meta.bg, color: meta.color, fontWeight: 600 }}>{n.type.replace(/_/g," ")}</span>
+                          <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 6, background: meta.color_bg ?? "#F5F4F0", color: meta.color_text ?? "#78716C", fontWeight: 600 }}>{meta.label}</span>
                           {!n.is_read && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#F59E0B", display: "inline-block" }} />}
                         </div>
                         {n.body && <p style={{ fontSize: 12.5, color: "#78716C", lineHeight: 1.5 }}>{n.body}</p>}
