@@ -58,7 +58,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
     if (selStatus !== "all" && l.status !== selStatus) return false;
     if (search) {
       const q = search.toLowerCase();
-      if (!l.name.toLowerCase().includes(q) && !(l.location??"").toLowerCase().includes(q) && !(l.country??"").toLowerCase().includes(q) && !(l.state??"").toLowerCase().includes(q) && !(l.contact_person??"").toLowerCase().includes(q)) return false;
+      if (!l.name.toLowerCase().includes(q) && !(l.location??"").toLowerCase().includes(q) && !(l.country??"").toLowerCase().includes(q) && !(l.state??"").toLowerCase().includes(q) && !(l.program_name??"").toLowerCase().includes(q) && !(l.contact_person??"").toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -76,9 +76,9 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
 
   function exportCSV() {
     const rows = [
-      ["Lead","Status",isAdmin?"Client":"","Country","State","Location","Contact Person","Contact Email","Contact Phone","Expected Revenue","Revenue Collected","Period","Cycle","Days Since Update","Previous Status"],
+      ["Lead","Program","Status",isAdmin?"Client":"","Country","State","Location","Contact Person","Contact Email","Contact Phone","Expected Revenue","Revenue Collected","Period","Cycle","Days Since Update","Previous Status"],
       ...filtered.map(l=>[
-        l.name,l.status,isAdmin?(l as any).clients?.name||"":"",
+        l.name,l.program_name||"",l.status,isAdmin?(l as any).clients?.name||"":"",
         l.country||"",l.state||"",l.location||"",
         l.contact_person||"",l.contact_email||"",l.contact_phone||"",
         l.expected_revenue||0,l.revenue_collected||0,
@@ -86,7 +86,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
         l.cycle_label||"",daysSince(l.status_updated_at||l.created_at),
         l.previous_status||"",
       ])
-    ].map(r=>r.filter((_,i)=>isAdmin||i!==2).join(",")).join("\n");
+    ].map(r=>r.filter((_,i)=>isAdmin||i!==3).join(",")).join("\n");
     const a=document.createElement("a");
     a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(rows);
     a.download=`lead-aging-${new Date().toISOString().split("T")[0]}.csv`;
@@ -195,6 +195,7 @@ export default function LeadAgingReport({ isAdmin=false }: { isAdmin?: boolean }
                       <td style={{padding:"11px 12px"}}>
                         <p style={{fontWeight:600,color:"#1C1917"}}>{l.name}</p>
                         {(l.country||l.state)&&<p style={{fontSize:11,color:"#A8A29E",marginTop:1}}>{[l.country,l.state].filter(Boolean).join(", ")}</p>}
+                        {l.program_name&&<span style={{fontSize:10.5,background:"#FFF7ED",color:"#C2410C",padding:"1px 6px",borderRadius:6,fontWeight:600,marginRight:4}}>{l.program_name}</span>}
                         {l.is_updated_this_cycle&&<span style={{fontSize:10,background:"#FEF3C7",color:"#92400E",padding:"1px 5px",borderRadius:6,fontWeight:700}}>UPDATED</span>}
                       </td>
                       {isAdmin&&<td style={{padding:"11px 12px",color:"#78716C",fontSize:12}}>{(l as any).clients?.name||"—"}</td>}
@@ -275,6 +276,7 @@ function PeriodGroup({title,subtitle,leads,isAdmin,statusOptions}:{title:string,
                   <td style={{padding:"9px 12px",fontWeight:600,color:"#1C1917"}}>
                     {l.name}
                     {(l.country||l.state)&&<span style={{fontSize:11,color:"#A8A29E",fontWeight:400,marginLeft:5}}>{[l.country,l.state].filter(Boolean).join(", ")}</span>}
+                    {l.program_name&&<span style={{fontSize:10.5,background:"#FFF7ED",color:"#C2410C",padding:"1px 6px",borderRadius:6,fontWeight:600,marginLeft:5}}>{l.program_name}</span>}
                   </td>
                   {isAdmin&&<td style={{padding:"9px 12px",color:"#78716C",fontSize:12}}>{(l as any).clients?.name||"—"}</td>}
                   <td style={{padding:"9px 12px"}}><span style={{fontSize:11.5,padding:"2px 8px",borderRadius:8,fontWeight:600,background:sc.bg,color:sc.text}}>{scMeta.label}</span></td>

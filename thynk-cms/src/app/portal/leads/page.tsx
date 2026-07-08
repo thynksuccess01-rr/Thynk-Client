@@ -51,6 +51,7 @@ export default function PortalLeadsPage() {
         (l.location ?? "").toLowerCase().includes(q) ||
         (l.country  ?? "").toLowerCase().includes(q) ||
         (l.state    ?? "").toLowerCase().includes(q) ||
+        (l.program_name ?? "").toLowerCase().includes(q) ||
         (l.contact_person ?? "").toLowerCase().includes(q);
     }
     return true;
@@ -67,9 +68,9 @@ export default function PortalLeadsPage() {
 
   function exportCSV() {
     const rows = [
-      ["Name","Status","Country","State","Location","Contact Person","Email","Phone","Expected Volume","Expected Revenue","Revenue Collected","Period","Cycle","Notes","Created"],
+      ["Name","Program","Status","Country","State","Location","Contact Person","Email","Phone","Expected Volume","Expected Revenue","Revenue Collected","Period","Cycle","Notes","Created"],
       ...leads.map(l => [
-        l.name, l.status,
+        l.name, l.program_name||"", l.status,
         l.country||"", l.state||"", l.location||"",
         l.contact_person||"", l.contact_email||"", l.contact_phone||"",
         l.expected_volume||"", l.expected_revenue||"", l.revenue_collected||"",
@@ -220,6 +221,9 @@ export default function PortalLeadsPage() {
                         )}
                         {l.cycle_label && (
                           <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, background: "#F5F4F0", color: "#78716C", fontWeight: 500 }}>{l.cycle_label}</span>
+                        )}
+                        {l.program_name && (
+                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, background: "#FFF7ED", color: "#C2410C", fontWeight: 600 }}>{l.program_name}</span>
                         )}
                       </div>
 

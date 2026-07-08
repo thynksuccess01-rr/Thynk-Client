@@ -32,7 +32,9 @@ interface Lead {
   expected_revenue?:number|null; revenue_collected?:number|null;
   total_licences_allocated?:number|null; status:LeadStatus; notes?:string;
   cycle_label?:string; previous_status?:string; is_updated_this_cycle?:boolean;
+  program_name?:string|null;
 }
+interface ClientProject { id:string; name:string; }
 interface CampaignUpdate {
   id:string; data_entry_id:string; client_id:string; channel:"email"|"whatsapp"|"calls";
   update_date:string; email_sent:number; email_opened:number; email_clicked:number;
@@ -49,6 +51,7 @@ interface EntryForm {
 interface LeadForm {
   name:string; country:string; state:string; location:string;
   expected_volume:string; expected_revenue:string; status:LeadStatus; notes:string; cycle_label:string;
+  program_name:string;
 }
 interface UpdateForm {
   channel:"email"|"whatsapp"|"calls"; update_date:string;
@@ -66,7 +69,7 @@ const EMPTY_ENTRY:EntryForm = {
 };
 const EMPTY_LEAD:LeadForm = {
   name:"", country:"", state:"", location:"", expected_volume:"", expected_revenue:"",
-  status:"new", notes:"", cycle_label:"",
+  status:"new", notes:"", cycle_label:"", program_name:"",
 };
 const mkUpdate = ():UpdateForm => ({
   channel:"email", update_date:new Date().toISOString().split("T")[0],
@@ -87,6 +90,7 @@ export default function DataPanelPage() {
   const [selClient,     setSelClient]     = useState("");
   const [entries,       setEntries]       = useState<DataEntry[]>([]);
   const [leads,         setLeads]         = useState<Lead[]>([]);
+  const [clientProjects,setClientProjects]= useState<ClientProject[]>([]);
   const [updates,       setUpdates]       = useState<CampaignUpdate[]>([]);
   const [activeEntry,   setActiveEntry]   = useState<string|null>(null);
   const [form,          setForm]          = useState<EntryForm>(EMPTY_ENTRY);
@@ -107,8 +111,8 @@ export default function DataPanelPage() {
   }, []);
 
   useEffect(() => {
-    if (!selClient) return;
-    loadEntries(); loadLeads();
+    if (!selClient) { setClientProjects([]); return; }
+    loadEntries(); loadLeads(); loadClientProjects();
   }, [selClient]);
 
   useEffect(() => {
@@ -125,6 +129,11 @@ export default function DataPanelPage() {
     const {data} = await supabase.from("leads").select("*")
       .eq("client_id", selClient).order("created_at", {ascending:false});
     setLeads(data??[]);
+  }
+  async function loadClientProjects() {
+    const {data} = await supabase.from("client_products")
+      .select("products(id,name)").eq("client_id", selClient);
+    setClientProjects(((data??[]) as any[]).map(r=>r.products).filter(Boolean));
   }
   async function loadUpdates() {
     if (!activeEntry || activeEntry==="new") return;
@@ -223,6 +232,7 @@ export default function DataPanelPage() {
       ...newLead, client_id:selClient, data_entry_id:activeEntry,
       expected_volume:newLead.expected_volume?Number(newLead.expected_volume):null,
       expected_revenue:newLead.expected_revenue?Number(newLead.expected_revenue):null,
+      program_name:newLead.program_name.trim()||null,
     });
     if (error) toast.error(error.message);
     else { toast.success("Lead added"); setNewLead(EMPTY_LEAD); setShowLeadForm(false); loadLeads(); }
@@ -714,7 +724,7 @@ export default function DataPanelPage() {
                     onCloseForm={()=>setShowLeadForm(false)}
                     onChange={(k,v)=>setNewLead(p=>({...p,[k]:v}))}
                     onSave={saveLead} onDelete={deleteLead} onUpdateStatus={updateLeadStatus}
-                    statusOptions={statusOptions}/>
+                    statusOptions={statusOptions} clientProjects={clientProjects}/>
                 </CollapsibleSection>
               )}
 
@@ -1075,11 +1085,11 @@ function CampaignSection({updates,acc,showForm,newUpdate,onOpenForm,onCloseForm,
 }
 
 // ─── LeadsSection ─────────────────────────────────────────────────────────────
-function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm,onChange,onSave,onDelete,onUpdateStatus,statusOptions}:{
+function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm,onChange,onSave,onDelete,onUpdateStatus,statusOptions,clientProjects}:{
   leads:Lead[];activeEntry:string|null;showForm:boolean;newLead:LeadForm;
   onOpenForm:()=>void;onCloseForm:()=>void;onChange:(k:keyof LeadForm,v:string)=>void;
   onSave:()=>void;onDelete:(id:string)=>void;onUpdateStatus:(id:string,ns:string,os:string)=>void;
-  statusOptions:DropdownOption[];
+  statusOptions:DropdownOption[]; clientProjects:ClientProject[];
 }) {
   const fields:[string,keyof LeadForm,string,string][] = [
     ["Lead Name *","name","text",""],["Country","country","text","India"],
@@ -1087,6 +1097,9 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
     ["Expected Volume","expected_volume","number",""],["Expected Revenue (₹)","expected_revenue","number",""],
     ["Cycle Label","cycle_label","text","e.g. Apr 2026"],
   ];
+  // This client runs more than one project/product — let the lead be tagged
+  // with which program it belongs to, so leads don't get mixed up across them.
+  const hasMultipleProjects = clientProjects.length > 1;
   return (
     <div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
@@ -1112,6 +1125,17 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
                 {statusOptions.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
+            {hasMultipleProjects && (
+              <div>
+                <label style={lbl}>Program / Project</label>
+                <input className="input" list="program-name-options" value={newLead.program_name}
+                  onChange={e=>onChange("program_name",e.target.value)}
+                  placeholder="Which program is this lead for?" style={{fontSize:13}}/>
+                <datalist id="program-name-options">
+                  {clientProjects.map(p=><option key={p.id} value={p.name}/>)}
+                </datalist>
+              </div>
+            )}
           </div>
           <textarea className="input" rows={2} placeholder="Notes..."
             value={newLead.notes} onChange={e=>onChange("notes",e.target.value)}
@@ -1129,7 +1153,7 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{borderBottom:"1px solid #F0EEEC",background:"#FAFAF9"}}>
-              {["Lead","Period","Country","State","Location","Volume","Exp. Rev","Collected","Status","Cycle","Change",""].map(h=>(
+              {[...(hasMultipleProjects?["Lead","Program"]:["Lead"]),"Period","Country","State","Location","Volume","Exp. Rev","Collected","Status","Cycle","Change",""].map(h=>(
                 <th key={h} style={{textAlign:"left",padding:"9px 10px",fontSize:11,fontWeight:600,color:"#A8A29E",whiteSpace:"nowrap"}}>{h}</th>
               ))}
             </tr></thead>
@@ -1139,6 +1163,13 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
                   <td style={{padding:"9px 10px",fontWeight:600,color:"#1C1917"}}>
                     {l.name}{l.is_updated_this_cycle&&<span style={{marginLeft:5,fontSize:10,background:"#FEF3C7",color:"#92400E",padding:"1px 5px",borderRadius:8,fontWeight:600}}>↑</span>}
                   </td>
+                  {hasMultipleProjects && (
+                    <td style={{padding:"9px 10px",fontSize:12}}>
+                      {l.program_name
+                        ? <span style={{background:"#FFF7ED",color:"#C2410C",padding:"1px 7px",borderRadius:6,fontWeight:500}}>{l.program_name}</span>
+                        : <span style={{color:"#D6D3D1"}}>—</span>}
+                    </td>
+                  )}
                   <td style={{padding:"9px 10px",fontSize:11.5}}>
                     {!l.data_entry_id?<span style={{color:"#D6D3D1"}}>—</span>:
                       l.data_entry_id===activeEntry?

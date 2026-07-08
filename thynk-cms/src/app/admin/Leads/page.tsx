@@ -12,7 +12,7 @@ const EMPTY_EDIT = {
   name: "", country: "", state: "", location: "",
   contact_person: "", contact_email: "", contact_phone: "",
   expected_volume: "", expected_revenue: "", status: "new",
-  notes: "", cycle_label: "",
+  notes: "", cycle_label: "", program_name: "",
 };
 
 export default function AdminLeadsPage() {
@@ -86,6 +86,7 @@ export default function AdminLeadsPage() {
       status:    lead.status ?? "new",
       notes:     lead.notes ?? "",
       cycle_label: lead.cycle_label ?? "",
+      program_name: lead.program_name ?? "",
     });
   }
 
@@ -105,6 +106,7 @@ export default function AdminLeadsPage() {
       status:      editForm.status,
       notes:       editForm.notes.trim() || null,
       cycle_label: editForm.cycle_label.trim() || null,
+      program_name: editForm.program_name.trim() || null,
       previous_status: editLead.status !== editForm.status ? editLead.status : editLead.previous_status,
       is_updated_this_cycle: editLead.status !== editForm.status ? true : editLead.is_updated_this_cycle,
       updated_at: new Date().toISOString(),
@@ -122,6 +124,7 @@ export default function AdminLeadsPage() {
       if (!l.name.toLowerCase().includes(q) &&
           !(l.location??"").toLowerCase().includes(q) &&
           !(l.contact_person??"").toLowerCase().includes(q) &&
+          !(l.program_name??"").toLowerCase().includes(q) &&
           !((l as any).clients?.name??"").toLowerCase().includes(q)) return false;
     }
     return true;
@@ -211,7 +214,7 @@ export default function AdminLeadsPage() {
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead>
                 <tr style={{background:"#FAFAF9",borderBottom:"1px solid #F0EEEC"}}>
-                  {["Lead","Client","Contact","Period","Status","Location","Exp. Revenue","Collected","Change",""].map(h=>(
+                  {["Lead","Client","Program","Contact","Period","Status","Location","Exp. Revenue","Collected","Change",""].map(h=>(
                     <th key={h} style={{textAlign:"left",padding:"10px 12px",fontSize:11.5,fontWeight:600,color:"#A8A29E",whiteSpace:"nowrap"}}>{h}</th>
                   ))}
                 </tr>
@@ -227,6 +230,11 @@ export default function AdminLeadsPage() {
                         {(l.country||l.state)&&<p style={{fontSize:11,color:"#A8A29E",fontWeight:400,marginTop:1}}>{[l.country,l.state].filter(Boolean).join(", ")}</p>}
                       </td>
                       <td style={{padding:"10px 12px",color:"#57534E",fontSize:12.5}}>{(l as any).clients?.name??"—"}</td>
+                      <td style={{padding:"10px 12px",fontSize:12}}>
+                        {l.program_name
+                          ? <span style={{background:"#FFF7ED",color:"#C2410C",padding:"1px 7px",borderRadius:6,fontWeight:500}}>{l.program_name}</span>
+                          : <span style={{color:"#D6D3D1"}}>—</span>}
+                      </td>
                       <td style={{padding:"10px 12px",fontSize:12,color:"#78716C"}}>
                         {l.contact_person && <p style={{fontWeight:500,color:"#1C1917"}}>{l.contact_person}</p>}
                         {l.contact_email  && <p style={{fontSize:11}}>{l.contact_email}</p>}
@@ -299,6 +307,9 @@ export default function AdminLeadsPage() {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
                 {field("Lead Name *","name")}
                 {field("Cycle Label","cycle_label","text","e.g. Q1 2025")}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10,marginBottom:16}}>
+                {field("Program / Project","program_name","text","e.g. Grade 6-8 Admission Drive (leave blank if client runs a single project)")}
               </div>
 
               {/* Location */}
