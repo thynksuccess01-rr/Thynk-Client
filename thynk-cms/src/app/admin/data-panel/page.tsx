@@ -32,7 +32,8 @@ interface Lead {
   expected_revenue?:number|null; revenue_collected?:number|null;
   total_licences_allocated?:number|null; status:LeadStatus; notes?:string;
   cycle_label?:string; previous_status?:string; is_updated_this_cycle?:boolean;
-  program_name?:string|null;
+  program_name?:string|null; created_at?:string;
+  created_by_name?:string|null; last_updated_by_name?:string|null; last_updated_by_role?:string|null;
 }
 interface ClientProject { id:string; name:string; }
 interface CampaignUpdate {
@@ -100,8 +101,18 @@ export default function DataPanelPage() {
   const [showUpdateForm,setShowUpdateForm]= useState(false);
   const [saving,        setSaving]        = useState(false);
   const [openSection,   setOpenSection]   = useState<string>("period");
+  const [me,            setMe]            = useState<{id:string; name:string}|null>(null);
 
   const supabase = createClient();
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
+      setMe({ id: user.id, name: (profile as any)?.full_name || user.email || "Admin" });
+    })();
+  }, []);
   const { options: statusOptions } = useDropdownOptions("lead_status");
   const { options: channelOptions } = useDropdownOptions("campaign_channel");
 
@@ -233,6 +244,9 @@ export default function DataPanelPage() {
       expected_volume:newLead.expected_volume?Number(newLead.expected_volume):null,
       expected_revenue:newLead.expected_revenue?Number(newLead.expected_revenue):null,
       program_name:newLead.program_name.trim()||null,
+      created_by: me?.id ?? null,
+      created_by_name: me?.name ?? null,
+      created_by_role: "admin",
     });
     if (error) toast.error(error.message);
     else { toast.success("Lead added"); setNewLead(EMPTY_LEAD); setShowLeadForm(false); loadLeads(); }
@@ -246,6 +260,9 @@ export default function DataPanelPage() {
     await supabase.from("leads").update({
       status:ns, previous_status:os, status_updated_at:new Date().toISOString(),
       is_updated_this_cycle:true, updated_at:new Date().toISOString(),
+      last_updated_by: me?.id ?? null,
+      last_updated_by_name: me?.name ?? null,
+      last_updated_by_role: "admin",
     }).eq("id",id);
     loadLeads();
   }
@@ -1153,7 +1170,7 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{borderBottom:"1px solid #F0EEEC",background:"#FAFAF9"}}>
-              {[...(hasMultipleProjects?["Lead","Program"]:["Lead"]),"Period","Country","State","Location","Volume","Exp. Rev","Collected","Status","Cycle","Change",""].map(h=>(
+              {[...(hasMultipleProjects?["Lead","Program"]:["Lead"]),"Period","Country","State","Location","Volume","Exp. Rev","Collected","Status","Cycle","Change","Added By",""].map(h=>(
                 <th key={h} style={{textAlign:"left",padding:"9px 10px",fontSize:11,fontWeight:600,color:"#A8A29E",whiteSpace:"nowrap"}}>{h}</th>
               ))}
             </tr></thead>
@@ -1199,6 +1216,16 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
                         <span style={{background:"#DCFCE7",color:"#15803D",padding:"1px 5px",borderRadius:4,fontSize:11}}>{l.status}</span>
                       </span>
                     ):<span style={{color:"#D6D3D1"}}>—</span>}
+                  </td>
+                  <td style={{padding:"9px 10px",fontSize:11,color:"#A8A29E",whiteSpace:"nowrap"}}>
+                    {l.created_by_name
+                      ? <span>Added by <strong style={{color:"#57534E"}}>{l.created_by_name}</strong>{l.created_at && <> on {new Date(l.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"})}</>}</span>
+                      : <span style={{color:"#D6D3D1"}}>—</span>}
+                    {l.last_updated_by_name && (
+                      <p style={{marginTop:2,color:"#A8A29E"}}>
+                        Last update by <strong style={{color:"#57534E"}}>{l.last_updated_by_name}</strong>{l.last_updated_by_role==="client" && <span style={{marginLeft:4,fontSize:9.5,background:"#EEF2FF",color:"#4338CA",padding:"1px 5px",borderRadius:6,fontWeight:700}}>CLIENT</span>}
+                      </p>
+                    )}
                   </td>
                   <td style={{padding:"9px 10px"}}>
                     <button onClick={()=>onDelete(l.id)}

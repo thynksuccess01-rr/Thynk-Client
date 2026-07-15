@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Search, Download, MapPin, Phone, Mail, User, TrendingUp, CheckCircle, XCircle, Clock, DollarSign, Package } from "lucide-react";
+import { Search, Download, MapPin, Phone, Mail, User, TrendingUp, CheckCircle, XCircle, Clock, DollarSign, Package, MessageSquare, ChevronDown, Send } from "lucide-react";
 import { useDropdownOptions, getOptionMeta } from "@/lib/dropdowns";
+import toast from "react-hot-toast";
 
 const fmtINR = (n: number) =>
   `₹${n >= 100000 ? `${(n / 100000).toFixed(1)}L` : n >= 1000 ? `${(n / 1000).toFixed(0)}K` : n}`;
@@ -14,6 +15,12 @@ export default function PortalLeadsPage() {
   const [loading, setLoading] = useState(true);
   const [accent,  setAccent]  = useState("#E8611A");
   const [primary, setPrimary] = useState("#1C1917");
+  const [updatingId, setUpdatingId] = useState<string|null>(null);
+  const [openNotesFor, setOpenNotesFor] = useState<string|null>(null);
+  const [notesByLead, setNotesByLead] = useState<Record<string, any[]>>({});
+  const [notesLoading, setNotesLoading] = useState<string|null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
   const supabase = createClient();
   const { options: statusOptions } = useDropdownOptions("lead_status");
   const STATUSES = ["all", ...statusOptions.map(s => s.value)];
@@ -22,26 +29,84 @@ export default function PortalLeadsPage() {
     return { bg: m.color_bg ?? "#F5F4F0", text: m.color_text ?? "#78716C", border: m.color_bg ?? "#E7E5E4", dot: m.color_text ?? "#A8A29E", label: m.label };
   };
 
-  useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: profileRaw } = await supabase
-        .from("profiles").select("client_id, clients(accent_color,primary_color)").eq("id", user.id).single();
-      const profile = profileRaw as any;
-      if (!profile?.client_id) return;
-      if (profile.clients?.accent_color)  setAccent(profile.clients.accent_color);
-      if (profile.clients?.primary_color) setPrimary(profile.clients.primary_color);
-      const { data } = await supabase
-        .from("leads")
-        .select("*, data_entries(period_start, period_end, entry_label)")
-        .eq("client_id", profile.client_id)
-        .order("created_at", { ascending: false });
-      setLeads(data ?? []);
-      setLoading(false);
-    }
-    load();
+  const load = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: profileRaw } = await supabase
+      .from("profiles").select("client_id, clients(accent_color,primary_color)").eq("id", user.id).single();
+    const profile = profileRaw as any;
+    if (!profile?.client_id) return;
+    if (profile.clients?.accent_color)  setAccent(profile.clients.accent_color);
+    if (profile.clients?.primary_color) setPrimary(profile.clients.primary_color);
+    const { data } = await supabase
+      .from("leads")
+      .select("*, data_entries(period_start, period_end, entry_label)")
+      .eq("client_id", profile.client_id)
+      .order("created_at", { ascending: false });
+    setLeads(data ?? []);
+    setLoading(false);
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function updateStatus(leadId: string, status: string) {
+    setUpdatingId(leadId);
+    try {
+      const res = await fetch(`/api/portal/leads/${leadId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toast.error(json.error || "Could not update status"); return; }
+      toast.success("Status updated");
+      await load();
+    } catch {
+      toast.error("Could not update status");
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function loadNotes(leadId: string) {
+    setNotesLoading(leadId);
+    try {
+      const res = await fetch(`/api/portal/leads/${leadId}/notes`);
+      const json = await res.json();
+      setNotesByLead(prev => ({ ...prev, [leadId]: json.notes ?? [] }));
+    } finally {
+      setNotesLoading(null);
+    }
+  }
+
+  function toggleNotes(leadId: string) {
+    const next = openNotesFor === leadId ? null : leadId;
+    setOpenNotesFor(next);
+    setNoteDraft("");
+    if (next && !notesByLead[next]) loadNotes(next);
+  }
+
+  async function addNote(leadId: string) {
+    if (!noteDraft.trim()) return;
+    setSavingNote(true);
+    try {
+      const res = await fetch(`/api/portal/leads/${leadId}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: noteDraft.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toast.error(json.error || "Could not add note"); return; }
+      toast.success("Note added");
+      setNoteDraft("");
+      await loadNotes(leadId);
+      await load();
+    } catch {
+      toast.error("Could not add note");
+    } finally {
+      setSavingNote(false);
+    }
+  }
 
   const filtered = leads.filter(l => {
     if (filter !== "all" && l.status !== filter) return false;
@@ -210,9 +275,16 @@ export default function PortalLeadsPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
                         <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1C1917", margin: 0 }}>{l.name}</h3>
-                        <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: meta.bg, color: meta.text, border: `1px solid ${meta.border}` }}>
-                          {meta.label}
-                        </span>
+                        <div style={{ position: "relative" }}>
+                          <select
+                            value={l.status}
+                            disabled={updatingId === l.id}
+                            onChange={e => updateStatus(l.id, e.target.value)}
+                            style={{ appearance: "none", fontSize: 11.5, fontWeight: 700, padding: "3px 24px 3px 10px", borderRadius: 20, background: meta.bg, color: meta.text, border: `1px solid ${meta.border}`, cursor: updatingId === l.id ? "wait" : "pointer", fontFamily: "inherit" }}>
+                            {statusOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                          </select>
+                          <ChevronDown size={11} style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: meta.text }} />
+                        </div>
                         {l.is_updated_this_cycle && (
                           <span style={{ fontSize: 10, fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "2px 7px", borderRadius: 8 }}>↑ UPDATED</span>
                         )}
@@ -308,12 +380,60 @@ export default function PortalLeadsPage() {
                     </span>
                   </div>
 
-                  {/* Notes */}
+                  {/* Internal notes (set by agency) */}
                   {l.notes && (
                     <p style={{ fontSize: 12.5, color: "#78716C", marginTop: 10, lineHeight: 1.6, paddingTop: 10, borderTop: "1px solid #F5F4F0" }}>
                       {l.notes}
                     </p>
                   )}
+
+                  {/* Last updated by */}
+                  {l.last_updated_by_name && (
+                    <p style={{ fontSize: 11.5, color: "#A8A29E", marginTop: 8 }}>
+                      Last updated by <strong style={{ color: "#78716C" }}>{l.last_updated_by_name}</strong>
+                      {l.last_updated_by_role === "client" && <span style={{ marginLeft: 5, fontSize: 9.5, background: "#EEF2FF", color: "#4338CA", padding: "1px 5px", borderRadius: 6, fontWeight: 700 }}>YOU/TEAM</span>}
+                      {" "}on {new Date(l.updated_at || l.status_updated_at || l.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  )}
+
+                  {/* Notes thread toggle */}
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #F5F4F0" }}>
+                    <button onClick={() => toggleNotes(l.id)}
+                      style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", cursor: "pointer", padding: 0, fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, color: accent }}>
+                      <MessageSquare size={13} /> {openNotesFor === l.id ? "Hide notes" : "View / add notes"}
+                    </button>
+
+                    {openNotesFor === l.id && (
+                      <div style={{ marginTop: 10 }}>
+                        {notesLoading === l.id ? (
+                          <p style={{ fontSize: 12, color: "#A8A29E" }}>Loading notes...</p>
+                        ) : (notesByLead[l.id]?.length ?? 0) === 0 ? (
+                          <p style={{ fontSize: 12, color: "#A8A29E" }}>No notes yet — add the first one below.</p>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+                            {notesByLead[l.id].map((n: any) => (
+                              <div key={n.id} style={{ background: "#F9F8F7", border: "1px solid #F0EEEC", borderRadius: 8, padding: "8px 10px" }}>
+                                <p style={{ fontSize: 12.5, color: "#1C1917", lineHeight: 1.5, margin: 0 }}>{n.note}</p>
+                                <p style={{ fontSize: 10.5, color: "#A8A29E", marginTop: 4 }}>
+                                  {n.author_name} · {n.author_role === "admin" ? "Thynk Success" : "Client"} · {new Date(n.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input value={noteDraft} onChange={e => setNoteDraft(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter" && !savingNote) addNote(l.id); }}
+                            placeholder="Add a note visible to everyone on this lead..."
+                            style={{ flex: 1, padding: "8px 12px", border: "1px solid #E7E5E4", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", outline: "none" }} />
+                          <button onClick={() => addNote(l.id)} disabled={savingNote || !noteDraft.trim()}
+                            style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 14px", borderRadius: 8, border: "none", background: accent, color: "#fff", fontSize: 12.5, fontWeight: 600, cursor: savingNote ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: savingNote || !noteDraft.trim() ? 0.6 : 1 }}>
+                            <Send size={12} /> Add
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );

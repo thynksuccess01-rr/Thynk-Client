@@ -15,6 +15,8 @@ const EMPTY_EDIT = {
   notes: "", cycle_label: "", program_name: "",
 };
 
+type SortKey = "name"|"client"|"program"|"period"|"status"|"location"|"expected_revenue"|"revenue_collected";
+
 export default function AdminLeadsPage() {
   const [clients,   setClients]   = useState<any[]>([]);
   const [entries,   setEntries]   = useState<any[]>([]);
@@ -22,17 +24,36 @@ export default function AdminLeadsPage() {
   const [selClient, setSelClient] = useState("all");
   const [selStatus, setSelStatus] = useState("all");
   const [selPeriod, setSelPeriod] = useState("all");
+  const [selProgram,setSelProgram]= useState("all");
   const [search,    setSearch]    = useState("");
   const [loading,   setLoading]   = useState(true);
   const [editLead,  setEditLead]  = useState<any>(null);
   const [editForm,  setEditForm]  = useState<typeof EMPTY_EDIT>(EMPTY_EDIT);
   const [saving,    setSaving]    = useState(false);
+  const [view,      setView]      = useState<"table"|"summary">("table");
+  const [sortKey,   setSortKey]   = useState<SortKey|null>(null);
+  const [sortDir,   setSortDir]   = useState<"asc"|"desc">("asc");
+  const [me,        setMe]        = useState<{id:string;name:string}|null>(null);
   const supabase = createClient();
   const { options: statusOptions } = useDropdownOptions("lead_status");
 
   useEffect(() => {
     supabase.from("clients").select("id,name").eq("is_active",true).order("name").then(r=>setClients(r.data??[]));
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
+      setMe({ id: user.id, name: (profile as any)?.full_name || user.email || "Admin" });
+    })();
+  }, []);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,6 +88,9 @@ export default function AdminLeadsPage() {
       status_updated_at: new Date().toISOString(),
       is_updated_this_cycle: true,
       updated_at: new Date().toISOString(),
+      last_updated_by: me?.id ?? null,
+      last_updated_by_name: me?.name ?? null,
+      last_updated_by_role: "admin",
     }).eq("id", id);
     load();
   }
@@ -110,15 +134,23 @@ export default function AdminLeadsPage() {
       previous_status: editLead.status !== editForm.status ? editLead.status : editLead.previous_status,
       is_updated_this_cycle: editLead.status !== editForm.status ? true : editLead.is_updated_this_cycle,
       updated_at: new Date().toISOString(),
+      ...(editLead.status !== editForm.status ? {
+        last_updated_by: me?.id ?? null,
+        last_updated_by_name: me?.name ?? null,
+        last_updated_by_role: "admin",
+      } : {}),
     }).eq("id", editLead.id);
     setSaving(false);
     if (error) toast.error(error.message);
     else { toast.success("Lead updated"); setEditLead(null); load(); }
   }
 
+  const programs = Array.from(new Set(leads.map(l=>l.program_name).filter(Boolean))) as string[];
+
   const filtered = leads.filter(l => {
     if (selStatus !== "all" && l.status !== selStatus) return false;
     if (selPeriod !== "all" && l.data_entry_id !== selPeriod) return false;
+    if (selProgram !== "all" && (l.program_name??"—") !== selProgram) return false;
     if (search) {
       const q = search.toLowerCase();
       if (!l.name.toLowerCase().includes(q) &&
@@ -129,6 +161,45 @@ export default function AdminLeadsPage() {
     }
     return true;
   });
+
+  const sorted = [...filtered].sort((a,b) => {
+    if (!sortKey) return 0;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const val = (l:any): any => {
+      switch (sortKey) {
+        case "name": return l.name?.toLowerCase() ?? "";
+        case "client": return (l.clients?.name ?? "").toLowerCase();
+        case "program": return (l.program_name ?? "").toLowerCase();
+        case "period": return l.data_entries?.period_start ?? "";
+        case "status": return l.status ?? "";
+        case "location": return (l.location ?? "").toLowerCase();
+        case "expected_revenue": return l.expected_revenue ?? 0;
+        case "revenue_collected": return l.revenue_collected ?? 0;
+        default: return "";
+      }
+    };
+    const av = val(a), bv = val(b);
+    if (av < bv) return -1*dir;
+    if (av > bv) return 1*dir;
+    return 0;
+  });
+
+  // ── Summary groupings (client-wise / program-wise), used by the Summary tab ──
+  function groupLeads(keyFn: (l:any)=>string) {
+    const map = new Map<string, { key:string; total:number; won:number; active:number; lost:number; revenue:number; pipeline:number }>();
+    for (const l of leads) {
+      const key = keyFn(l) || "—";
+      if (!map.has(key)) map.set(key, { key, total:0, won:0, active:0, lost:0, revenue:0, pipeline:0 });
+      const g = map.get(key)!;
+      g.total++;
+      if (l.status === "won") { g.won++; g.revenue += l.expected_revenue ?? 0; }
+      else if (l.status === "lost") g.lost++;
+      else { g.active++; g.pipeline += l.expected_revenue ?? 0; }
+    }
+    return Array.from(map.values()).sort((a,b)=>b.total-a.total);
+  }
+  const byClient  = groupLeads(l => (l as any).clients?.name);
+  const byProgram = groupLeads(l => l.program_name);
 
   const stats = {
     total:    leads.length,
@@ -158,9 +229,19 @@ export default function AdminLeadsPage() {
           </h1>
           <p style={{fontSize:13,color:"#78716C",marginTop:3}}>Complete view of all leads across clients and periods</p>
         </div>
-        <Link href="/admin/lead-aging" style={{display:"flex",alignItems:"center",gap:7,padding:"9px 18px",borderRadius:10,border:"1px solid #E7E5E4",background:"#fff",color:"#E8611A",fontWeight:600,fontSize:13,textDecoration:"none"}}>
-          <Clock size={15}/> Lead Aging Report
-        </Link>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",border:"1px solid #E7E5E4",borderRadius:10,overflow:"hidden",background:"#fff"}}>
+            {(["table","summary"] as const).map(v=>(
+              <button key={v} onClick={()=>setView(v)}
+                style={{padding:"9px 16px",border:"none",background:view===v?"#1C1917":"transparent",color:view===v?"#fff":"#78716C",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+                {v==="table"?"📋 Table":"📊 Summary"}
+              </button>
+            ))}
+          </div>
+          <Link href="/admin/lead-aging" style={{display:"flex",alignItems:"center",gap:7,padding:"9px 18px",borderRadius:10,border:"1px solid #E7E5E4",background:"#fff",color:"#E8611A",fontWeight:600,fontSize:13,textDecoration:"none"}}>
+            <Clock size={15}/> Lead Aging Report
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}
@@ -181,6 +262,18 @@ export default function AdminLeadsPage() {
         ))}
       </div>
 
+      {view === "summary" ? (
+      <SummaryView byClient={byClient} byProgram={byProgram} fmtINR={fmtINR}
+        onDrillClient={(name:string)=>{
+          const c = clients.find(c=>c.name===name);
+          setSelClient(c?c.id:"all"); setSelProgram("all"); setView("table");
+        }}
+        onDrillProgram={(name:string)=>{
+          setSelProgram(name==="—"?"all":name); setSelClient("all"); setView("table");
+        }}
+      />
+      ) : (
+      <>
       {/* Filters */}
       <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{position:"relative",flex:1,minWidth:200}}>
@@ -191,6 +284,7 @@ export default function AdminLeadsPage() {
         {[
           { value:selClient, set:(v:string)=>{setSelClient(v);setSelPeriod("all");}, opts:[{v:"all",l:"All Clients"},...clients.map(c=>({v:c.id,l:c.name}))], w:140 },
           { value:selStatus, set:(v:string)=>setSelStatus(v), opts:[{v:"all",l:"All Statuses"},...statusOptions.map(s=>({v:s.value,l:s.label}))], w:130 },
+          { value:selProgram, set:(v:string)=>setSelProgram(v), opts:[{v:"all",l:"All Programs"},...programs.map(p=>({v:p,l:p}))], w:150 },
         ].map((sel,i)=>(
           <div key={i} style={{position:"relative"}}>
             <select value={sel.value} onChange={e=>sel.set(e.target.value)}
@@ -214,13 +308,21 @@ export default function AdminLeadsPage() {
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead>
                 <tr style={{background:"#FAFAF9",borderBottom:"1px solid #F0EEEC"}}>
-                  {["Lead","Client","Program","Contact","Period","Status","Location","Exp. Revenue","Collected","Change",""].map(h=>(
-                    <th key={h} style={{textAlign:"left",padding:"10px 12px",fontSize:11.5,fontWeight:600,color:"#A8A29E",whiteSpace:"nowrap"}}>{h}</th>
+                  {([
+                    ["Lead","name"],["Client","client"],["Program","program"],["Contact",null],
+                    ["Period","period"],["Status","status"],["Location","location"],
+                    ["Exp. Revenue","expected_revenue"],["Collected","revenue_collected"],
+                    ["Change",null],["Added By",null],["",null],
+                  ] as [string, SortKey|null][]).map(([h,key])=>(
+                    <th key={h} onClick={()=>key&&toggleSort(key)}
+                      style={{textAlign:"left",padding:"10px 12px",fontSize:11.5,fontWeight:600,color:"#A8A29E",whiteSpace:"nowrap",cursor:key?"pointer":"default",userSelect:"none"}}>
+                      {h}{key&&sortKey===key?(sortDir==="asc"?" ▲":" ▼"):""}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(l => {
+                {sorted.map(l => {
                   const entry = l.data_entries;
                   return (
                     <tr key={l.id} style={{borderBottom:"1px solid #FAFAF9",background:l.is_updated_this_cycle?"#FFFBEB":"transparent"}}>
@@ -262,6 +364,17 @@ export default function AdminLeadsPage() {
                           ? <span><span style={{background:"#FEE2E2",color:"#B91C1C",padding:"1px 5px",borderRadius:4,fontSize:11}}>{l.previous_status}</span>{" → "}<span style={{background:"#DCFCE7",color:"#15803D",padding:"1px 5px",borderRadius:4,fontSize:11}}>{l.status}</span></span>
                           : <span style={{color:"#D6D3D1"}}>—</span>}
                       </td>
+                      <td style={{padding:"10px 12px",fontSize:11,color:"#A8A29E",whiteSpace:"nowrap"}}>
+                        {l.created_by_name
+                          ? <span>{l.created_by_name}{l.created_at && <><br/><span style={{fontSize:10}}>{new Date(l.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"})}</span></>}</span>
+                          : <span style={{color:"#D6D3D1"}}>—</span>}
+                        {l.last_updated_by_name && (
+                          <div style={{marginTop:3,paddingTop:3,borderTop:"1px dashed #F0EEEC"}}>
+                            Updated: <strong style={{color:"#57534E"}}>{l.last_updated_by_name}</strong>
+                            {l.last_updated_by_role==="client" && <span style={{marginLeft:4,fontSize:9,background:"#EEF2FF",color:"#4338CA",padding:"1px 4px",borderRadius:5,fontWeight:700}}>CLIENT</span>}
+                          </div>
+                        )}
+                      </td>
                       <td style={{padding:"10px 12px"}}>
                         <div style={{display:"flex",gap:4}}>
                           <button onClick={()=>openEdit(l)}
@@ -286,6 +399,8 @@ export default function AdminLeadsPage() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* Edit Modal */}
       {editLead && (
@@ -294,7 +409,15 @@ export default function AdminLeadsPage() {
           <div style={{position:"relative",background:"#fff",borderRadius:16,width:"min(680px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",overflow:"hidden"}}>
             {/* Modal header */}
             <div style={{padding:"18px 24px",borderBottom:"1px solid #F0EEEC",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-              <h2 style={{fontSize:16,fontWeight:700,color:"#1C1917",margin:0}}>✏️ Edit Lead — {editLead.name}</h2>
+              <div>
+                <h2 style={{fontSize:16,fontWeight:700,color:"#1C1917",margin:0}}>✏️ Edit Lead — {editLead.name}</h2>
+                {editLead.created_by_name && (
+                  <p style={{fontSize:11.5,color:"#A8A29E",marginTop:3}}>
+                    Added by <strong style={{color:"#78716C"}}>{editLead.created_by_name}</strong> on {new Date(editLead.created_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}
+                    {editLead.last_updated_by_name && <> · last updated by <strong style={{color:"#78716C"}}>{editLead.last_updated_by_name}</strong></>}
+                  </p>
+                )}
+              </div>
               <button onClick={()=>setEditLead(null)} style={{background:"transparent",border:"none",cursor:"pointer",padding:6,borderRadius:8,display:"flex"}}>
                 <X size={18} color="#78716C"/>
               </button>
@@ -365,6 +488,60 @@ export default function AdminLeadsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Summary tab: client-wise & program-wise breakdown with drill-down ───────
+type GroupRow = { key:string; total:number; won:number; active:number; lost:number; revenue:number; pipeline:number };
+function SummaryView({byClient,byProgram,fmtINR,onDrillClient,onDrillProgram}:{
+  byClient:GroupRow[]; byProgram:GroupRow[]; fmtINR:(n:number)=>string;
+  onDrillClient:(name:string)=>void; onDrillProgram:(name:string)=>void;
+}) {
+  const Table = ({title,rows,onDrill}:{title:string;rows:GroupRow[];onDrill:(k:string)=>void}) => (
+    <div style={{background:"#fff",border:"1px solid #E7E5E4",borderRadius:10,overflow:"hidden",marginBottom:20}}>
+      <div style={{padding:"14px 16px",borderBottom:"1px solid #F0EEEC"}}>
+        <p style={{fontSize:13.5,fontWeight:700,color:"#1C1917",margin:0}}>{title}</p>
+        <p style={{fontSize:11.5,color:"#A8A29E",marginTop:2}}>Click a row to drill down into those leads</p>
+      </div>
+      {rows.length===0 ? (
+        <div style={{padding:"30px 0",textAlign:"center",color:"#A8A29E",fontSize:13}}>No data yet</div>
+      ) : (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{background:"#FAFAF9",borderBottom:"1px solid #F0EEEC"}}>
+                {["Name","Total","Active","Won","Lost","Won Revenue","Pipeline"].map(h=>(
+                  <th key={h} style={{textAlign:"left",padding:"9px 12px",fontSize:11.5,fontWeight:600,color:"#A8A29E"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r=>(
+                <tr key={r.key} onClick={()=>onDrill(r.key)}
+                  style={{borderBottom:"1px solid #FAFAF9",cursor:"pointer"}}
+                  onMouseEnter={e=>(e.currentTarget.style.background="#FAFAF9")}
+                  onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
+                  <td style={{padding:"9px 12px",fontWeight:600,color:"#1C1917"}}>{r.key}</td>
+                  <td style={{padding:"9px 12px",fontWeight:700,color:"#6366F1"}}>{r.total}</td>
+                  <td style={{padding:"9px 12px",color:"#F59E0B",fontWeight:600}}>{r.active}</td>
+                  <td style={{padding:"9px 12px",color:"#16A34A",fontWeight:600}}>{r.won}</td>
+                  <td style={{padding:"9px 12px",color:"#EF4444",fontWeight:600}}>{r.lost}</td>
+                  <td style={{padding:"9px 12px",color:"#16A34A",fontWeight:600}}>{r.revenue?fmtINR(r.revenue):"—"}</td>
+                  <td style={{padding:"9px 12px",color:"#7C3AED",fontWeight:600}}>{r.pipeline?fmtINR(r.pipeline):"—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      <Table title="📊 Client-wise Lead Summary" rows={byClient} onDrill={onDrillClient}/>
+      <Table title="🎯 Program-wise Lead Summary" rows={byProgram} onDrill={onDrillProgram}/>
     </div>
   );
 }
