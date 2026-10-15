@@ -32,7 +32,7 @@ interface Lead {
   expected_revenue?:number|null; revenue_collected?:number|null;
   total_licences_allocated?:number|null; status:LeadStatus; notes?:string;
   cycle_label?:string; previous_status?:string; is_updated_this_cycle?:boolean;
-  program_name?:string|null; created_at?:string;
+  program_name?:string|null; institute_name?:string|null; created_at?:string;
   created_by_name?:string|null; last_updated_by_name?:string|null; last_updated_by_role?:string|null;
 }
 interface ClientProject { id:string; name:string; }
@@ -52,7 +52,7 @@ interface EntryForm {
 interface LeadForm {
   name:string; country:string; state:string; location:string;
   expected_volume:string; expected_revenue:string; status:LeadStatus; notes:string; cycle_label:string;
-  program_name:string;
+  program_name:string; institute_name:string;
 }
 interface UpdateForm {
   channel:"email"|"whatsapp"|"calls"; update_date:string;
@@ -70,7 +70,7 @@ const EMPTY_ENTRY:EntryForm = {
 };
 const EMPTY_LEAD:LeadForm = {
   name:"", country:"", state:"", location:"", expected_volume:"", expected_revenue:"",
-  status:"new", notes:"", cycle_label:"", program_name:"",
+  status:"new", notes:"", cycle_label:"", program_name:"", institute_name:"",
 };
 const mkUpdate = ():UpdateForm => ({
   channel:"email", update_date:new Date().toISOString().split("T")[0],
@@ -244,6 +244,7 @@ export default function DataPanelPage() {
       expected_volume:newLead.expected_volume?Number(newLead.expected_volume):null,
       expected_revenue:newLead.expected_revenue?Number(newLead.expected_revenue):null,
       program_name:newLead.program_name.trim()||null,
+      institute_name:newLead.institute_name.trim()||null,
       created_by: me?.id ?? null,
       created_by_name: me?.name ?? null,
       created_by_role: "admin",
@@ -1109,7 +1110,7 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
   statusOptions:DropdownOption[]; clientProjects:ClientProject[];
 }) {
   const fields:[string,keyof LeadForm,string,string][] = [
-    ["Lead Name *","name","text",""],["Country","country","text","India"],
+    ["Lead Name *","name","text",""],["Institute Name","institute_name","text","e.g. Delhi Public School"],["Country","country","text","India"],
     ["State","state","text",""],["City / Location","location","text",""],
     ["Expected Volume","expected_volume","number",""],["Expected Revenue (₹)","expected_revenue","number",""],
     ["Cycle Label","cycle_label","text","e.g. Apr 2026"],
@@ -1170,7 +1171,7 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{borderBottom:"1px solid #F0EEEC",background:"#FAFAF9"}}>
-              {[...(hasMultipleProjects?["Lead","Program"]:["Lead"]),"Period","Country","State","Location","Volume","Exp. Rev","Collected","Status","Cycle","Change","Added By",""].map(h=>(
+              {[...(hasMultipleProjects?["Lead","Institute","Program"]:["Lead","Institute"]),"Period","Country","State","Location","Volume","Exp. Rev","Collected","Status","Cycle","Change","Added By",""].map(h=>(
                 <th key={h} style={{textAlign:"left",padding:"9px 10px",fontSize:11,fontWeight:600,color:"#A8A29E",whiteSpace:"nowrap"}}>{h}</th>
               ))}
             </tr></thead>
@@ -1180,6 +1181,7 @@ function LeadsSection({leads,activeEntry,showForm,newLead,onOpenForm,onCloseForm
                   <td style={{padding:"9px 10px",fontWeight:600,color:"#1C1917"}}>
                     {l.name}{l.is_updated_this_cycle&&<span style={{marginLeft:5,fontSize:10,background:"#FEF3C7",color:"#92400E",padding:"1px 5px",borderRadius:8,fontWeight:600}}>↑</span>}
                   </td>
+                  <td style={{padding:"9px 10px",color:"#57534E",fontSize:12}}>{l.institute_name||<span style={{color:"#D6D3D1"}}>—</span>}</td>
                   {hasMultipleProjects && (
                     <td style={{padding:"9px 10px",fontSize:12}}>
                       {l.program_name

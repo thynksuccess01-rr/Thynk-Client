@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { getCaller } from "@/lib/supabase/route-auth";
 
 // Adds a note to a lead. Notes are visible to both admin and the owning
 // client (see lead_notes RLS in schema_v4.sql). Works for both admin and
@@ -14,32 +14,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "note is required" }, { status: 400 });
     }
 
-    const cookieStore = cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll(); },
-          setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-            try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); } catch {}
-          },
-        },
-      }
-    );
-
-    const { data: { user } } = await supabase.auth.getUser();
+    const { admin, user, profile } = await getCaller(req);
     if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-
-    const { data: profile } = await supabase
-      .from("profiles").select("client_id, full_name, role").eq("id", user.id).single();
     if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
-
-    const admin = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } }
-    );
 
     const { data: lead, error: leadErr } = await admin
       .from("leads").select("id, client_id").eq("id", params.id).single();
