@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Thynk Success",
+    "slug": "thynk-success",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.thynksuccess.cis"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E8611A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.thynksuccess.cis"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "splash": {
+      "backgroundColor": "#FAFAF9"
+    }
+  }
+}
