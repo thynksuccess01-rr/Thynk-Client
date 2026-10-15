@@ -2,7 +2,12 @@
   "expo": {
     "name": "Thynk Success",
     "slug": "thynk-success",
-    "version": "1.0.0",
+       "extra": {
+      "eas": {
+        "projectId": "2d8531fd-9e73-4611-94d8-d27e864f9f72"
+      }
+    },
+       "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
